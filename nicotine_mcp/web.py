@@ -1,0 +1,253 @@
+# SPDX-FileCopyrightText: 2026 nicotine-mcp contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Local web dashboard for the human in the loop.
+
+Serves a single page that shows connection status, downloads (with
+progress, speed and queue position), recent searches with their ranked
+results, and recent log messages. Downloads can be paused, retried or
+removed from the page.
+
+The dashboard binds to localhost only. Requests must carry a local
+``Host`` header (protection against DNS rebinding), and state changing
+requests must carry the ``X-Requested-With: nicotine-mcp`` header, which
+browsers only send after a CORS preflight that this server never grants
+(protection against cross-site request forgery).
+
+Only the Python standard library is used.
+"""
+
+from __future__ import annotations
+
+import json
+
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer
+from importlib import resources
+from threading import Thread
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
+
+from nicotine_mcp.automation import make_preferences
+
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "[::1]", "::1"}
+REQUEST_HEADER = "X-Requested-With"
+REQUEST_HEADER_VALUE = "nicotine-mcp"
+MAX_BODY_SIZE = 64 * 1024
+CALL_TIMEOUT = 15
+
+
+class DashboardServer:
+    """Serves the dashboard in a background thread."""
+
+    def __init__(self, runner, host="127.0.0.1", port=8585):
+
+        self.runner = runner
+        self.host = host
+        self.port = port
+        self._server = None
+        self._thread = None
+
+    @property
+    def url(self):
+
+        host = self.host
+
+        if host in {"0.0.0.0", "::"}:
+            host = "127.0.0.1"
+
+        return f"http://{host}:{self.port}/"
+
+    def start(self):
+
+        handler_class = type("BoundDashboardHandler", (DashboardHandler,), {"runner": self.runner})
+
+        self._server = ThreadingHTTPServer((self.host, self.port), handler_class)
+        self._server.daemon_threads = True
+        self.port = self._server.server_address[1]
+
+        self._thread = Thread(target=self._server.serve_forever, name="DashboardServer", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+
+        if self._server is None:
+            return
+
+        self._server.shutdown()
+        self._server.server_close()
+        self._server = None
+
+
+def load_index_html():
+    return resources.files("nicotine_mcp").joinpath("static/index.html").read_bytes()
+
+
+class DashboardHandler(BaseHTTPRequestHandler):
+
+    runner = None  # Set on a subclass by DashboardServer
+    server_version = "nicotine-mcp"
+    sys_version = ""
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format, *args):  # pylint: disable=redefined-builtin
+        # Keep stderr free of access logs
+        pass
+
+    # Helpers #
+
+    def _call(self, func, *args, **kwargs):
+        return self.runner.call(func, *args, **kwargs).result(CALL_TIMEOUT)
+
+    def _send(self, status, body, content_type):
+
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_json(self, data, status=HTTPStatus.OK):
+        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self._send(status, body, "application/json; charset=utf-8")
+
+    def _send_error_json(self, status, message):
+        self._send_json({"error": message}, status=status)
+
+    def _is_local_request(self):
+        """Rejects requests whose Host or Origin header is not local."""
+
+        host = (self.headers.get("Host") or "").strip().lower()
+        hostname = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
+
+        if hostname not in LOCAL_HOSTNAMES:
+            return False
+
+        origin = self.headers.get("Origin")
+
+        if origin:
+            origin_host = (urlparse(origin).hostname or "").lower()
+
+            if origin_host not in LOCAL_HOSTNAMES and f"[{origin_host}]" not in LOCAL_HOSTNAMES:
+                return False
+
+        return True
+
+    def _read_json_body(self):
+
+        length = int(self.headers.get("Content-Length") or 0)
+
+        if length <= 0:
+            return {}
+
+        if length > MAX_BODY_SIZE:
+            raise ValueError("Request body too large")
+
+        data = json.loads(self.rfile.read(length).decode("utf-8"))
+
+        if not isinstance(data, dict):
+            raise ValueError("Request body must be a JSON object")
+
+        return data
+
+    # Routes #
+
+    def do_GET(self):  # pylint: disable=invalid-name
+
+        if not self._is_local_request():
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Only local requests are allowed")
+            return
+
+        url = urlparse(self.path)
+        params = parse_qs(url.query)
+
+        try:
+            if url.path in {"/", "/index.html"}:
+                self._send(HTTPStatus.OK, load_index_html(), "text/html; charset=utf-8")
+
+            elif url.path == "/api/state":
+                self._send_json(self._get_state())
+
+            elif url.path.startswith("/api/search/"):
+                self._send_json(self._get_search_results(url.path.rpartition("/")[-1], params))
+
+            else:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "Not found")
+
+        except (KeyError, ValueError) as error:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+
+        except Exception as error:
+            self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def do_POST(self):  # pylint: disable=invalid-name
+
+        if not self._is_local_request():
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Only local requests are allowed")
+            return
+
+        if self.headers.get(REQUEST_HEADER) != REQUEST_HEADER_VALUE:
+            self._send_error_json(HTTPStatus.FORBIDDEN, f"Missing {REQUEST_HEADER} header")
+            return
+
+        url = urlparse(self.path)
+        automation = self.runner.automation
+
+        try:
+            data = self._read_json_body()
+
+            if url.path == "/api/downloads/cancel":
+                result = self._call(
+                    automation.cancel_download, data["username"], data["virtual_path"], bool(data.get("remove", True))
+                )
+
+            elif url.path == "/api/downloads/retry":
+                result = self._call(automation.retry_download, data["username"], data["virtual_path"])
+
+            elif url.path == "/api/downloads/clear-finished":
+                result = self._call(automation.clear_finished_downloads)
+
+            elif url.path == "/api/searches/stop":
+                result = {"stopped": self._call(automation.stop_search, int(data["token"]))}
+
+            else:
+                self._send_error_json(HTTPStatus.NOT_FOUND, "Not found")
+                return
+
+            self._send_json(result)
+
+        except (KeyError, ValueError, RuntimeError, TypeError) as error:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+
+        except Exception as error:
+            self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def do_OPTIONS(self):  # pylint: disable=invalid-name
+        # No CORS: cross-origin pages never get to talk to the dashboard
+        self._send_error_json(HTTPStatus.FORBIDDEN, "Cross-origin requests are not allowed")
+
+    # Data #
+
+    def _get_state(self):
+
+        state = self._call(self.runner.automation.get_dashboard_state)
+        state["recent_log"] = list(self.runner.recent_log)[-40:]
+        state["dashboard_url"] = self.runner.dashboard_url
+        return state
+
+    def _get_search_results(self, token, params):
+
+        group = params.get("group", ["track"])[0]
+        limit = int(params.get("limit", ["15"])[0])
+        formats = params.get("formats", ["any"])[0]
+        prefs = make_preferences(formats=formats.split(","), max_per_user=0)
+        automation = self.runner.automation
+
+        if group == "album":
+            return self._call(automation.rank_albums, int(token), prefs, limit)
+
+        return self._call(automation.rank_tracks, int(token), prefs, limit)

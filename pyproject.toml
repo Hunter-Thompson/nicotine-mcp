@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: 2026 nicotine-mcp contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nicotine-mcp"
+version = "0.1.0"
+description = "MCP server and dashboard that let AI agents search and download music from Soulseek through Nicotine+"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "GPL-3.0-or-later"}
+authors = [{name = "nicotine-mcp contributors"}]
+keywords = ["mcp", "soulseek", "nicotine", "music", "agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: No Input/Output (Daemon)",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Topic :: Communications :: File Sharing",
+    "Topic :: Multimedia :: Sound/Audio"
+]
+dependencies = [
+    "mcp>=1.2"
+]
+
+[project.optional-dependencies]
+dev = ["pycodestyle", "pylint"]
+
+[project.scripts]
+nicotine-mcp = "nicotine_mcp.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Hunter-Thompson/nicotine-mcp"
+"Nicotine+" = "https://nicotine-plus.org"
+"Model Context Protocol" = "https://modelcontextprotocol.io"
+
+[tool.setuptools.packages.find]
+include = ["nicotine_mcp*"]
+
+[tool.setuptools.package-data]
+nicotine_mcp = ["static/*.html"]
+
+[tool.pylint.master]
+disable = [
+    "broad-except",
+    "broad-exception-caught",
+    "cyclic-import",
+    "duplicate-code",
+    "fixme",
+    "import-outside-toplevel",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "missing-module-docstring",
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-instance-attributes",
+    "too-many-locals",
+    "too-many-positional-arguments",
+    "too-many-public-methods",
+    "too-many-return-statements",
+    "too-many-statements"
+]
+ignore-paths = ["build", "venv", "tests/smoke_client.py"]
+py-version = "3.10"
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.refactoring]
+max-nested-blocks = 6

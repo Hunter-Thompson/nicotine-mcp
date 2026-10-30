@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 nicotine-mcp contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install Nicotine+ core (no GTK) and nicotine-mcp
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-deps "nicotine-plus @ git+https://github.com/nicotine-plus/nicotine-plus@master"
+          python -m pip install -e ".[dev]"
+      - name: pycodestyle
+        run: python -m pycodestyle nicotine_mcp tests
+      - name: pylint
+        run: python -m pylint nicotine_mcp tests
+      - name: Unit tests
+        run: python -m unittest discover -s tests -t . -v

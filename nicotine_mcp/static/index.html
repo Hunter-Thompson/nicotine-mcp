@@ -1,0 +1,335 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: 2026 nicotine-mcp contributors
+  SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nicotine+ MCP</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1c1f26; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --idle: #6b7280;
+    --bar-bg: #e5e7eb; --row-hover: #f8fafc; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --panel: #171a21; --text: #e6e8ee; --muted: #9aa3b2; --line: #272b35;
+      --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --idle: #9aa3b2;
+      --bar-bg: #262a33; --row-hover: #1d2129;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 14px 20px;
+           background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 17px; margin: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+          font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+  .pill.online .dot { background: var(--ok); }
+  .pill.offline .dot { background: var(--bad); }
+  .muted { color: var(--muted); }
+  .spacer { flex: 1; }
+  main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .tile .value { font-size: 24px; font-weight: 700; margin-top: 2px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; }
+  section > .head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px;
+                    border-bottom: 1px solid var(--line); }
+  section > .head h2 { font-size: 14px; margin: 0; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button, .btn { background: transparent; color: var(--text); border: 1px solid var(--line);
+                       border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:hover, .tabs button:hover { border-color: var(--accent); }
+  .btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  tr:hover td { background: var(--row-hover); }
+  td.file { max-width: 420px; }
+  td.file .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.file .folder { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+           color: #fff; background: var(--idle); white-space: nowrap; }
+  .badge.active { background: var(--accent); } .badge.finished { background: var(--ok); }
+  .badge.queued { background: var(--warn); } .badge.failed { background: var(--bad); }
+  .bar { width: 140px; height: 8px; background: var(--bar-bg); border-radius: 4px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s; }
+  .bar.finished > div { background: var(--ok); }
+  .progress { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .actions { white-space: nowrap; }
+  .actions .btn { padding: 2px 8px; margin-left: 4px; }
+  .empty { padding: 18px 14px; color: var(--muted); }
+  .searches tr { cursor: pointer; }
+  .searches tr.selected td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .results { border-top: 1px solid var(--line); }
+  .results .head { padding: 8px 14px; display: flex; gap: 10px; align-items: center; }
+  pre.log { margin: 0; padding: 10px 14px; font: 12px/1.5 var(--mono); max-height: 260px; overflow: auto;
+            white-space: pre-wrap; word-break: break-word; }
+  .error { color: var(--bad); }
+  @media (max-width: 800px) { .bar { width: 80px; } td.file { max-width: 200px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nicotine+ MCP</h1>
+  <span id="status" class="pill"><span class="dot"></span><span>connecting…</span></span>
+  <span id="folder" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="updated" class="muted">updating…</span>
+  <button id="pause" class="btn" type="button">Pause refresh</button>
+</header>
+<main>
+  <div class="tiles">
+    <div class="tile"><div class="label">Active</div><div class="value" id="t-active">–</div></div>
+    <div class="tile"><div class="label">Queued</div><div class="value" id="t-queued">–</div></div>
+    <div class="tile"><div class="label">Failed</div><div class="value" id="t-failed">–</div></div>
+    <div class="tile"><div class="label">Finished</div><div class="value" id="t-finished">–</div></div>
+    <div class="tile"><div class="label">Speed</div><div class="value" id="t-speed">–</div></div>
+  </div>
+
+  <section>
+    <div class="head">
+      <h2>Downloads</h2>
+      <div class="tabs" id="filters"></div>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-action="clear-finished">Clear finished</button>
+    </div>
+    <div id="downloads"></div>
+  </section>
+
+  <section>
+    <div class="head">
+      <h2>Searches</h2>
+      <span class="muted">click a search to see its ranked results</span>
+    </div>
+    <div id="searches"></div>
+    <div id="results" class="results" hidden></div>
+  </section>
+
+  <section>
+    <div class="head"><h2>Log</h2></div>
+    <pre class="log" id="log"></pre>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
+    {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  const FILTERS = ["all", "active", "queued", "paused", "failed", "finished"];
+  const state = { filter: "all", paused: false, selectedSearch: null, group: "track", lastUpdate: null, data: null };
+
+  async function api(path, body) {
+    const options = body === undefined ? {} : {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "X-Requested-With": "nicotine-mcp"},
+      body: JSON.stringify(body)
+    };
+    const response = await fetch(path, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || response.statusText);
+    return data;
+  }
+
+  function renderStatus(data) {
+    const status = data.status;
+    const pill = $("status");
+    pill.className = "pill " + (status.connected ? "online" : "offline");
+    pill.lastElementChild.textContent = status.connected
+      ? `${status.status} as ${status.username}`
+      : (status.needs_credentials ? "offline – no account configured" : "offline");
+    $("folder").textContent = status.download_folder || "";
+    const counts = status.downloads;
+    $("t-active").textContent = counts.active;
+    $("t-queued").textContent = counts.queued;
+    $("t-failed").textContent = counts.failed;
+    $("t-finished").textContent = counts.finished;
+    $("t-speed").textContent = data.download_speed || "–";
+  }
+
+  function renderFilters(downloads) {
+    $("filters").innerHTML = FILTERS.map((name) => {
+      const count = name === "all" ? downloads.length : downloads.filter((d) => d.state === name).length;
+      return `<button type="button" data-filter="${name}" class="${name === state.filter ? "active" : ""}">` +
+             `${name} (${count})</button>`;
+    }).join("");
+  }
+
+  function actionButtons(d) {
+    const key = `data-user="${esc(d.username)}" data-path="${esc(d.virtual_path)}"`;
+    const buttons = [];
+    if (d.state === "active" || d.state === "queued") {
+      buttons.push(`<button class="btn" type="button" data-action="pause" ${key}>Pause</button>`);
+    }
+    if (d.state === "paused" || d.state === "failed") {
+      buttons.push(`<button class="btn" type="button" data-action="retry" ${key}>Retry</button>`);
+    }
+    buttons.push(`<button class="btn danger" type="button" data-action="remove" ${key}>Remove</button>`);
+    return buttons.join("");
+  }
+
+  function renderDownloads(downloads) {
+    const rows = downloads.filter((d) => state.filter === "all" || d.state === state.filter);
+    if (!rows.length) {
+      $("downloads").innerHTML = `<div class="empty">No ${state.filter === "all" ? "" : state.filter + " "}downloads.</div>`;
+      return;
+    }
+    $("downloads").innerHTML = `<table><thead><tr>
+      <th>File</th><th>User</th><th>Status</th><th>Progress</th><th class="num">Size</th>
+      <th class="num">Speed</th><th class="num">ETA / Queue</th><th></th></tr></thead><tbody>` +
+      rows.map((d) => {
+        const folder = d.virtual_path.slice(0, d.virtual_path.length - d.basename.length);
+        const eta = d.state === "active" && d.time_left_seconds ? fmtDuration(d.time_left_seconds)
+          : (d.state === "queued" && d.queue_position ? `#${d.queue_position} in queue` : "");
+        const status = d.state === "failed" ? `${esc(d.status)}${d.will_retry ? " (retrying)" : ""}` : esc(d.status);
+        return `<tr>
+          <td class="file"><div class="name" title="${esc(d.virtual_path)}">${esc(d.basename)}</div>` +
+          `<div class="folder" title="${esc(d.local_path || d.download_folder)}">${esc(folder)}</div></td>
+          <td>${esc(d.username)}</td>
+          <td><span class="badge ${d.state}">${status}</span></td>
+          <td><div class="progress"><div class="bar ${d.state}"><div style="width:${d.progress_percent}%"></div></div>` +
+          `<span>${d.progress_percent.toFixed(0)}%</span></div></td>
+          <td class="num">${esc(d.size)}</td>
+          <td class="num">${esc(d.speed || "")}</td>
+          <td class="num">${eta}</td>
+          <td class="actions">${actionButtons(d)}</td></tr>`;
+      }).join("") + "</tbody></table>";
+  }
+
+  function renderSearches(searches) {
+    if (!searches.length) {
+      $("searches").innerHTML = `<div class="empty">No searches yet. Searches started by the agent show up here.</div>`;
+      return;
+    }
+    $("searches").innerHTML = `<table class="searches"><thead><tr>
+      <th>Query</th><th>Mode</th><th class="num">Users</th><th class="num">Files</th><th>Formats</th>
+      <th class="num">Age</th><th></th></tr></thead><tbody>` +
+      searches.map((s) => {
+        const formats = Object.entries(s.formats || {}).map(([k, v]) => `${k} ${v}`).join(", ");
+        return `<tr data-token="${s.token}" class="${s.token === state.selectedSearch ? "selected" : ""}">
+          <td>${esc(s.query)}${s.username ? ` <span class="muted">(${esc(s.username)})</span>` : ""}</td>
+          <td>${esc(s.mode)}</td><td class="num">${s.num_users_responded}</td><td class="num">${s.num_files}</td>
+          <td class="muted">${esc(formats)}</td><td class="num">${fmtDuration(s.elapsed_seconds)}</td>
+          <td class="actions">${s.is_active ? `<button class="btn" type="button" data-action="stop-search" ` +
+            `data-token="${s.token}">Stop</button>` : `<span class="muted">stopped</span>`}</td></tr>`;
+      }).join("") + "</tbody></table>";
+  }
+
+  async function renderResults() {
+    const box = $("results");
+    if (state.selectedSearch === null) { box.hidden = true; return; }
+    box.hidden = false;
+    let data;
+    try {
+      data = await api(`/api/search/${state.selectedSearch}?group=${state.group}&limit=15`);
+    } catch (error) {
+      box.innerHTML = `<div class="empty error">${esc(error.message)}</div>`;
+      return;
+    }
+    const head = `<div class="head"><strong>Top results for “${esc(data.search.query)}”</strong>
+      <div class="tabs"><button type="button" data-group="track" class="${state.group === "track" ? "active" : ""}">Tracks</button>
+      <button type="button" data-group="album" class="${state.group === "album" ? "active" : ""}">Albums</button></div>
+      <span class="spacer"></span><button class="btn" type="button" data-action="close-results">Close</button></div>`;
+    const items = state.group === "album" ? data.albums : data.tracks;
+    if (!items.length) { box.innerHTML = head + `<div class="empty">No matching results.</div>`; return; }
+    box.innerHTML = head + `<table><thead><tr><th class="num">Score</th><th>User</th>
+      <th>${state.group === "album" ? "Folder" : "File"}</th><th>Quality</th><th class="num">Size</th>
+      <th>Slot / queue</th><th class="num">Upload speed</th></tr></thead><tbody>` +
+      items.map((r) => `<tr>
+        <td class="num">${r.score}</td><td>${esc(r.username)}${r.country_code ? ` <span class="muted">${esc(r.country_code)}</span>` : ""}</td>
+        <td class="file"><div class="name" title="${esc(r.virtual_path || r.folder_path)}">${esc(state.group === "album" ? r.folder_name : r.basename)}</div>
+          <div class="folder">${esc(state.group === "album" ? `${r.num_audio_files} audio files, ${r.formats.join("/")}` : r.folder_path)}</div></td>
+        <td>${esc(state.group === "album" ? r.formats.join(", ") : r.quality)}</td>
+        <td class="num">${esc(r.total_size || r.size)}</td>
+        <td>${r.has_free_slot ? '<span class="badge finished">free slot</span>' : `<span class="badge queued">${r.queue_length} queued</span>`}</td>
+        <td class="num">${esc(r.upload_speed || "")}</td></tr>`).join("") + "</tbody></table>";
+  }
+
+  function fmtDuration(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  }
+
+  function render(data) {
+    state.data = data;
+    renderStatus(data);
+    renderFilters(data.downloads);
+    renderDownloads(data.downloads);
+    renderSearches(data.searches);
+    $("log").textContent = (data.recent_log || []).join("\n");
+    if (data.searches.length && state.selectedSearch !== null &&
+        !data.searches.some((s) => s.token === state.selectedSearch)) {
+      state.selectedSearch = null;
+      renderResults();
+    }
+  }
+
+  async function refresh() {
+    if (state.paused) return;
+    try {
+      const data = await api("/api/state");
+      render(data);
+      state.lastUpdate = Date.now();
+      $("updated").textContent = "updated just now";
+      $("updated").classList.remove("error");
+    } catch (error) {
+      $("updated").textContent = `update failed: ${error.message}`;
+      $("updated").classList.add("error");
+    }
+  }
+
+  document.addEventListener("click", async (event) => {
+    const el = event.target.closest("button, tr[data-token]");
+    if (!el) return;
+    try {
+      if (el.dataset.filter) { state.filter = el.dataset.filter; if (state.data) render(state.data); return; }
+      if (el.dataset.group) { state.group = el.dataset.group; await renderResults(); return; }
+      const action = el.dataset.action;
+      if (action === "pause") await api("/api/downloads/cancel", {username: el.dataset.user, virtual_path: el.dataset.path, remove: false});
+      else if (action === "remove") await api("/api/downloads/cancel", {username: el.dataset.user, virtual_path: el.dataset.path, remove: true});
+      else if (action === "retry") await api("/api/downloads/retry", {username: el.dataset.user, virtual_path: el.dataset.path});
+      else if (action === "clear-finished") await api("/api/downloads/clear-finished", {});
+      else if (action === "stop-search") { await api("/api/searches/stop", {token: Number(el.dataset.token)}); event.stopPropagation(); }
+      else if (action === "close-results") { state.selectedSearch = null; await renderResults(); return; }
+      else if (el.matches("tr[data-token]")) { state.selectedSearch = Number(el.dataset.token); await renderResults(); }
+      else return;
+      await refresh();
+      if (state.selectedSearch !== null && !el.matches("tr[data-token]")) await renderResults();
+    } catch (error) {
+      $("updated").textContent = `action failed: ${error.message}`;
+      $("updated").classList.add("error");
+    }
+  });
+
+  $("pause").addEventListener("click", () => {
+    state.paused = !state.paused;
+    $("pause").textContent = state.paused ? "Resume refresh" : "Pause refresh";
+    if (!state.paused) refresh();
+  });
+
+  setInterval(() => {
+    if (state.lastUpdate && !state.paused) {
+      const age = Math.round((Date.now() - state.lastUpdate) / 1000);
+      if (age >= 2 && !$("updated").classList.contains("error")) $("updated").textContent = `updated ${age}s ago`;
+    }
+  }, 1000);
+
+  refresh();
+  setInterval(refresh, 2000);
+  setInterval(() => { if (state.selectedSearch !== null && !state.paused) renderResults(); }, 10000);
+})();
+</script>
+</body>
+</html>

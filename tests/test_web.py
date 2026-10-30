@@ -8,6 +8,7 @@ import shutil
 from collections import deque
 from concurrent.futures import Future
 from http.client import HTTPConnection
+from types import SimpleNamespace
 from unittest import TestCase
 
 from pynicotine.config import config
@@ -17,6 +18,8 @@ from pynicotine.slskmessages import UserStatus
 
 from nicotine_mcp.automation import Automation
 from nicotine_mcp.automation import DownloadState
+from nicotine_mcp.jobs import JobManager
+from nicotine_mcp.matching import Release
 from nicotine_mcp.web import DashboardServer
 from nicotine_mcp.web import REQUEST_HEADER
 from nicotine_mcp.web import REQUEST_HEADER_VALUE
@@ -35,6 +38,7 @@ class FakeRunner:
         self.automation = automation
         self.recent_log = deque(["Starting", "Logged in"], maxlen=10)
         self.dashboard_url = None
+        self.jobs = None
 
     def call(self, func, *args, **kwargs):
 
@@ -235,3 +239,55 @@ class DashboardTest(TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(json.loads(payload)["stopped"])
         self.assertFalse(self.automation.searches[token].is_active)
+
+    def test_jobs(self):
+
+        status, _content_type, payload = self.request("GET", "/api/state")
+        self.assertEqual(json.loads(payload)["jobs"], [])
+
+        status, _content_type, payload = self.request("GET", "/api/jobs/nope")
+        self.assertEqual(status, 400)
+
+        catalog = SimpleNamespace(is_on_label=lambda *_args: True)
+        self.runner.jobs = JobManager(self.runner, SimpleNamespace(catalog=catalog))
+        job_id = self.runner.jobs.create_job(
+            "BITE", [Release("musicbrainz:1", "musicbrainz", "Barker", "Utility")], mode="preview"
+        )["job_id"]
+
+        status, _content_type, payload = self.request("GET", "/api/state")
+        job = json.loads(payload)["jobs"][0]
+        self.assertEqual(job["job_id"], job_id)
+        self.assertEqual(job["shelf"][0]["title"], "Utility")
+        self.assertEqual(job["shelf"][0]["state"], "pending")
+
+        status, _content_type, payload = self.request("GET", f"/api/jobs/{job_id}")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["releases"][0]["title"], "Utility")
+
+        status, _content_type, payload = self.post("/api/jobs/pause", {"job_id": job_id}, authorized=False)
+        self.assertEqual(status, 403)
+        self.assertEqual(self.runner.jobs.describe_job(job_id)["status"], "running")
+
+        for path, expected_status in (("pause", "paused"), ("resume", "running")):
+            status, _content_type, payload = self.post(f"/api/jobs/{path}", {"job_id": job_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(payload)["status"], expected_status)
+
+        status, _content_type, payload = self.post("/api/jobs/start-downloads", {"job_id": job_id})
+        self.assertEqual(json.loads(payload)["mode"], "download")
+
+        status, _content_type, payload = self.post("/api/jobs/retry-missing", {"job_id": job_id})
+        self.assertEqual(json.loads(payload)["num_retried"], 0)
+
+        status, _content_type, payload = self.post("/api/jobs/cancel", {"job_id": job_id})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["status"], "cancelled")
+
+        status, _content_type, payload = self.post("/api/jobs/remove", {"job_id": job_id})
+        self.assertTrue(json.loads(payload)["removed"])
+
+        status, _content_type, payload = self.post("/api/jobs/resume", {"job_id": "nope"})
+        self.assertEqual(status, 400)
+
+        status, _content_type, payload = self.post("/api/jobs/nonsense", {"job_id": "nope"})
+        self.assertEqual(status, 400)

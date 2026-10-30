@@ -52,12 +52,17 @@ class CoreRunner:
 
         self.isolated_mode = isolated_mode
         self.automation = None
+        self.catalog = None
+        self.library = None
+        self.sourcer = None
+        self.jobs = None
         self.recent_log = deque(maxlen=100)
         self.dashboard_url = None
         self.ready = Event()
         self.stopped = Event()
         self.startup_error = None
         self._thread = None
+        self._config_modified_time = None
 
     def start(self):
 
@@ -77,11 +82,32 @@ class CoreRunner:
 
         if self.ready.is_set() and not self.stopped.is_set():
             try:
-                self.call(core.quit).result(timeout)
+                self.call(self._quit_core).result(timeout)
             except Exception:
                 pass
 
         self._thread.join(timeout)
+
+    def _quit_core(self):
+        """Quitting writes the configuration from memory. An edit of the file
+        since we started must not get lost, so the file is read again first."""
+
+        if self._get_config_modified_time() != self._config_modified_time:
+            # Loading does nothing unless this says there is nothing loaded yet
+            config.config_loaded = False
+            config.load_config(self.isolated_mode)
+            self._apply_environment_credentials()
+
+        core.quit()
+
+    @staticmethod
+    def _get_config_modified_time():
+
+        try:
+            return os.path.getmtime(config.config_file_path)
+
+        except OSError:
+            return None
 
     def _apply_environment_credentials(self):
         """Allow providing credentials without touching the config file."""
@@ -111,6 +137,7 @@ class CoreRunner:
 
             self._apply_environment_credentials()
             core.start()
+            self._config_modified_time = self._get_config_modified_time()
             self.automation = Automation()
 
         except Exception as error:
@@ -233,7 +260,16 @@ class CoreRunner:
 
             await anyio.sleep(1.0)
 
-    async def request_folder_download(self, username, folder_path, download_folder=None, audio_only=False):
+    async def request_folder_listing(self, username, folder_path):
+        """Requests the contents of a folder without downloading it."""
+
+        future = Future()
+
+        await self.call_async(self.automation.request_folder_listing, username, folder_path, future.set_result)
+        return await anyio.to_thread.run_sync(future.result, Automation.FOLDER_REQUEST_TIMEOUT + 10)
+
+    async def request_folder_download(self, username, folder_path, download_folder=None, audio_only=False,
+                                      formats=None):
         """Requests folder contents and enqueues them, falling back to known
         search results if the user does not respond."""
 
@@ -241,7 +277,7 @@ class CoreRunner:
 
         await self.call_async(
             self.automation.request_folder_download, username, folder_path, future.set_result,
-            download_folder=download_folder, audio_only=audio_only
+            download_folder=download_folder, audio_only=audio_only, formats=formats
         )
 
         result = await anyio.to_thread.run_sync(future.result, Automation.FOLDER_REQUEST_TIMEOUT + 10)
@@ -252,7 +288,7 @@ class CoreRunner:
         try:
             fallback = await self.call_async(
                 self.automation.download_folder_from_search, username, folder_path,
-                download_folder=download_folder, audio_only=audio_only
+                download_folder=download_folder, audio_only=audio_only, formats=formats
             )
         except ToolError as error:
             raise ToolError(

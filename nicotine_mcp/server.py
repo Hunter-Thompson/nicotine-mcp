@@ -8,36 +8,78 @@ Requires the ``mcp`` Python package (https://pypi.org/project/mcp/).
 
 from __future__ import annotations
 
+import os
+import signal
 import sys
 import time
 
 from inspect import cleandoc
-from typing import Annotated
-from typing import Literal
 
-from pydantic import Field
-
+from pynicotine.config import config
 from pynicotine.core import core
 
 from nicotine_mcp import DEFAULT_UI_PORT
 from nicotine_mcp.automation import Automation
 from nicotine_mcp.automation import DownloadState
 from nicotine_mcp.automation import make_preferences
+from nicotine_mcp.catalog import Catalog
+from nicotine_mcp.collection_tools import register_collection_tools
+from nicotine_mcp.jobs import JOBS_FILE_NAME
+from nicotine_mcp.jobs import JobManager
+from nicotine_mcp.library import LibraryIndex
 from nicotine_mcp.ranking import DEFAULT_FORMATS
+from nicotine_mcp.ranking import is_file_wanted
 from nicotine_mcp.mcp_compat import MCPServerClass
 from nicotine_mcp.mcp_compat import ToolError
 from nicotine_mcp.mcp_compat import anyio
 from nicotine_mcp.runner import CoreRunner
+from nicotine_mcp.sourcing import ReleaseSourcer
+from nicotine_mcp.sourcing import pick_probe_file
+from nicotine_mcp.speed import Entrant
+from nicotine_mcp.speed import pick_entrants
+from nicotine_mcp.speed import race_downloads
+from nicotine_mcp.tool_params import AlbumQuery
+from nicotine_mcp.tool_params import AudioOnly
+from nicotine_mcp.tool_params import described
+from nicotine_mcp.tool_params import DownloadFolder
+from nicotine_mcp.tool_params import FlacOnly
+from nicotine_mcp.tool_params import FolderPath
+from nicotine_mcp.tool_params import Formats
+from nicotine_mcp.tool_params import GroupBy
+from nicotine_mcp.tool_params import Limit
+from nicotine_mcp.tool_params import MaxAttempts
+from nicotine_mcp.tool_params import MaxLength
+from nicotine_mcp.tool_params import MaxPerUser
+from nicotine_mcp.tool_params import MaxQueue
+from nicotine_mcp.tool_params import MinBitrate
+from nicotine_mcp.tool_params import MinLength
+from nicotine_mcp.tool_params import OptionalFolderPath
+from nicotine_mcp.tool_params import OptionalUsername
+from nicotine_mcp.tool_params import Prefer
+from nicotine_mcp.tool_params import RemoveEntry
+from nicotine_mcp.tool_params import RequireFreeSlot
+from nicotine_mcp.tool_params import SearchMode
+from nicotine_mcp.tool_params import SearchUser
+from nicotine_mcp.tool_params import StateFilter
+from nicotine_mcp.tool_params import TrackQuery
+from nicotine_mcp.tool_params import Username
+from nicotine_mcp.tool_params import VirtualPath
+from nicotine_mcp.tool_params import WaitForAlbumStart
+from nicotine_mcp.tool_params import WaitForTrackStart
+from nicotine_mcp.tool_params import WaitSeconds
 
 SERVER_NAME = "nicotine-plus"
+
+# More candidates than fit in a race, as some are left out for being slow or of lesser quality
+RACE_CANDIDATES = 12
 SERVER_INSTRUCTIONS = """Nicotine+ gives you access to the Soulseek peer-to-peer network to search for and
 download music.
 
 Typical workflows:
 
 - Single track: call download_best_track(query) and you are done. It searches, ranks
-  the results (free upload slot and fast uploader first, then audio quality), downloads
-  the best copy and falls back to the next candidate if the transfer does not start.
+  the results (free upload slot and fast uploader first, then audio quality), starts the
+  best few at once, keeps the one that is really the fastest and drops the others.
 - Album: call download_best_album(query). It picks the best shared folder, fetches the
   full folder listing from the uploader and downloads every file in it.
 - Manual: search_tracks / search_albums return ranked candidates with scores and
@@ -46,6 +88,24 @@ Typical workflows:
   usually keep arriving for a while.
 - Track progress with get_downloads or block with wait_for_downloads. Finished files
   carry a local_path.
+- The album a song is on: call download_album_for_track(artist, title). It asks a music
+  catalog which album that is, and only downloads a folder after checking it against the
+  album's tracklist. Use find_track_albums first if the user may want a specific release.
+- A whole record label: labels are rarely part of shared file names, so don't search for
+  them. Call find_label(name), and confirm the right one with the user if several could
+  match. The label is usually in both catalogs and each lacks releases the other has, so
+  pass one ID as label_id and the other as also_label_id from here on. Check the catalog
+  with get_label_releases. Then call start_label_job to run a preview in the background: it finds out
+  what is available without downloading anything. Report the result from get_job to the
+  user, and call start_job_downloads(job_id) once they agree. Jobs keep running between
+  tool calls and survive restarts, there is no need to wait for them.
+- An artist's whole discography: works the same way with find_artist, get_artist_releases
+  and start_artist_job, passing the artist's ID in both catalogs as artist_id and
+  also_artist_id. Compilations they only appear on are left out unless include_appearances
+  is set. Aliases and side projects count as artists of their own.
+
+When FLAC is asked for, pass flac_only=true to any download tool. It's strict: nothing else
+is downloaded, and a copy in another format doesn't count as already owned.
 
 Notes: queries work best as "artist title" or "artist album" without punctuation.
 Virtual paths use backslashes and belong to a specific user. Formats are file
@@ -53,53 +113,8 @@ extensions ordered by preference ("flac", "mp3", or "lossless", "lossy", "any").
 Downloads land in the configured Nicotine+ download folder."""
 
 
-def _described(annotation, description):
-    """Shorthand for a tool parameter annotation with a description."""
-    return Annotated[annotation, Field(description=description)]
-
-
-Formats = _described(
-    list[str] | None,
-    "Allowed audio formats (file extensions) ordered by preference, e.g. ['flac', 'mp3']. "
-    "Also accepts 'lossless', 'lossy' or 'any'. Defaults to ['flac', 'mp3']."
-)
-Prefer = _described(
-    Literal["balanced", "quality", "availability"],
-    "What to optimize for: 'balanced', 'quality' (lossless/high bitrate first) or "
-    "'availability' (free slot and fast uploader first)."
-)
-MinBitrate = _described(int, "Minimum bitrate in kbps for lossy files (0 = no minimum). Lossless always passes.")
-RequireFreeSlot = _described(bool, "Only consider uploaders that currently have a free upload slot.")
-MaxQueue = _described(int | None, "Ignore uploaders with more than this many files queued (None = no limit).")
-MinLength = _described(int, "Minimum track length in seconds when known (0 = no minimum).")
-MaxLength = _described(int, "Maximum track length in seconds when known (0 = no maximum).")
-WaitSeconds = _described(float, "How long to wait for search results before ranking (1-60 seconds).")
-SearchMode = _described(
-    Literal["global", "user", "buddies", "rooms"],
-    "Where to search: the whole network (global), a single user's shares (user), buddies or joined rooms."
-)
-SearchUser = _described(str | None, "Username whose shares to search, required when mode is 'user'.")
-DownloadFolder = _described(str | None, "Local folder to save into. Defaults to the Nicotine+ download folder.")
-AudioOnly = _described(bool, "Skip non-audio files (cover art, cue/log files) when downloading a folder.")
-TrackQuery = _described(str, "Search terms, e.g. 'artist title'. Prefix a word with - to exclude it.")
-AlbumQuery = _described(str, "Search terms, e.g. 'artist album'. Prefix a word with - to exclude it.")
-GroupBy = _described(Literal["track", "album"], "Return ranked tracks or ranked folders.")
-Username = _described(str, "Uploader username from a search result.")
-VirtualPath = _described(str, "Virtual path of the file from a search result (uses backslashes).")
-FolderPath = _described(str, "Virtual folder path from a search result (uses backslashes).")
-MaxAttempts = _described(int, "How many candidates to try before giving up.")
-WaitForTrackStart = _described(int, "How long to wait for a transfer to start before trying the next candidate.")
-WaitForAlbumStart = _described(
-    int, "How long to wait for the first file to start transferring before trying the next folder."
-)
-StateFilter = _described(
-    Literal["all", "queued", "active", "paused", "finished", "failed"], "Filter by download state."
-)
-OptionalUsername = _described(str | None, "Only downloads from this user.")
-OptionalFolderPath = _described(str | None, "Only downloads inside this remote folder.")
-Limit = _described(int, "Maximum number of entries to return.")
-RemoveEntry = _described(bool, "Remove the entry from the download list instead of pausing it.")
-MaxPerUser = _described(int, "Maximum number of results per uploader in the ranked list (0 = unlimited).")
+def track_quality(track):
+    return 10000 if track["is_lossless"] else (track["bitrate_kbps"] or 1)
 
 
 def build_server(runner):
@@ -152,7 +167,7 @@ def build_server(runner):
 
     @tool()
     async def connect(
-        timeout_seconds: _described(int, "How long to wait for the login to complete.") = 20
+        timeout_seconds: described(int, "How long to wait for the login to complete.") = 20
     ) -> dict:
         """Connects to the Soulseek server if not already connected, and waits for the login."""
 
@@ -235,7 +250,7 @@ def build_server(runner):
 
     @tool()
     async def get_search_results(
-        token: _described(int, "Search token returned by a previous search."),
+        token: described(int, "Search token returned by a previous search."),
         group_by: GroupBy = "track",
         formats: Formats = None,
         prefer: Prefer = "balanced",
@@ -274,6 +289,7 @@ def build_server(runner):
     @tool()
     async def download_best_track(
         query: TrackQuery,
+        flac_only: FlacOnly = False,
         formats: Formats = None,
         prefer: Prefer = "balanced",
         min_bitrate: MinBitrate = 0,
@@ -288,41 +304,50 @@ def build_server(runner):
         mode: SearchMode = "global",
         username: SearchUser = None
     ) -> dict:
-        """Searches for a track, downloads the best copy, and falls back to the next candidate when the
-        transfer does not start in time (e.g. the uploader is queued or unreachable).
+        """Searches for a track and downloads it from the fastest uploader: the best few candidates start
+        at once, and after a few seconds of measuring the fastest is kept. What uploaders report about
+        their speed is unreliable, so this finds out for real. Falls back to the next few candidates
+        when none of them start in time (e.g. the uploaders are queued or unreachable).
 
-        Returns the chosen track, its download entry and a log of attempts. The download continues in
+        Returns the chosen track, its download entry and a log of races. The download continues in
         the background, use wait_for_downloads to block until it finishes.
         """
 
-        prefs = preferences(formats, prefer, min_bitrate, require_free_slot, max_queue, min_length, max_length)
+        formats = ["flac"] if flac_only else formats
+        prefs = preferences(formats, prefer, min_bitrate, require_free_slot, max_queue, min_length, max_length, 1)
         token = await run_search(query, mode, username, wait_seconds)
-        ranked = await runner.call_async(automation.rank_tracks, token, prefs, max(1, max_attempts))
+        ranked = await runner.call_async(automation.rank_tracks, token, prefs, max(RACE_CANDIDATES, max_attempts))
         attempts = []
+        remaining = ranked["tracks"]
 
-        if not ranked["tracks"]:
+        if not remaining:
             raise ToolError(f"No results matching the filters for '{query}' "
                             f"({ranked['search']['num_files']} files from "
                             f"{ranked['search']['num_users_responded']} users seen)")
 
-        for candidate in ranked["tracks"]:
-            candidate_username = candidate["username"]
-            virtual_path = candidate["virtual_path"]
+        while remaining:
+            speeds = {
+                track["username"]: await runner.call_async(automation.get_uploader_speed, track["username"])
+                for track in remaining
+            }
+            candidates = pick_entrants(remaining, speeds, track_quality)
+            remaining = [track for track in remaining if track not in candidates]
+            entrants = []
 
-            await runner.call_async(
-                automation.download_file, candidate_username, virtual_path, download_folder=download_folder
-            )
-            download = await runner.wait_for_download_start(candidate_username, virtual_path, wait_for_start_seconds)
-            attempts.append({"candidate": candidate, "download": download})
+            for candidate in candidates:
+                await runner.call_async(
+                    automation.download_file, candidate["username"], candidate["virtual_path"],
+                    download_folder=download_folder
+                )
+                entrants.append(Entrant(candidate["username"], candidate["virtual_path"], candidate))
 
-            if download["state"] in {DownloadState.ACTIVE, DownloadState.FINISHED}:
-                return {"success": True, "token": token, "track": candidate, "download": download,
+            winner = await race_downloads(runner, entrants, start_timeout=wait_for_start_seconds)
+            attempts.append({"race": [entrant.describe() for entrant in entrants]})
+
+            if winner is not None:
+                download = await runner.call_async(automation.get_download, winner.username, winner.virtual_path)
+                return {"success": True, "token": token, "track": winner.data, "download": download,
                         "attempts": attempts}
-
-            try:
-                await runner.call_async(automation.cancel_download, candidate_username, virtual_path, True)
-            except ToolError:
-                pass
 
         return {"success": False, "token": token, "track": None, "download": None, "attempts": attempts,
                 "error": "None of the candidates started transferring in time. Try again later, raise "
@@ -333,7 +358,8 @@ def build_server(runner):
         username: Username,
         folder_path: FolderPath,
         download_folder: DownloadFolder = None,
-        audio_only: AudioOnly = False
+        audio_only: AudioOnly = False,
+        flac_only: FlacOnly = False
     ) -> dict:
         """Downloads an entire folder (album) from a user into a subfolder named after it.
 
@@ -342,11 +368,14 @@ def build_server(runner):
         not respond.
         """
 
-        return await runner.request_folder_download(username, folder_path, download_folder, audio_only)
+        return await runner.request_folder_download(
+            username, folder_path, download_folder, audio_only, ["flac"] if flac_only else None
+        )
 
     @tool()
     async def download_best_album(
         query: AlbumQuery,
+        flac_only: FlacOnly = False,
         formats: Formats = None,
         prefer: Prefer = "balanced",
         min_bitrate: MinBitrate = 0,
@@ -360,16 +389,18 @@ def build_server(runner):
         mode: SearchMode = "global",
         username: SearchUser = None
     ) -> dict:
-        """Searches for an album, downloads the best shared folder, and falls back to the next folder
-        when nothing starts transferring in time.
+        """Searches for an album and downloads the best shared folder from the fastest uploader: one
+        file from each of the best few folders starts at once, and after a few seconds of measuring the
+        rest of the fastest one follows. Falls back to the next few when none of them start in time.
 
-        Returns the chosen folder, the enqueued files and a log of attempts. Downloads continue in
+        Returns the chosen folder, the enqueued files and a log of races. Downloads continue in
         the background, use wait_for_downloads with the folder_path to block until they finish.
         """
 
+        formats = ["flac"] if flac_only else formats
         prefs = preferences(formats, prefer, min_bitrate, require_free_slot, max_queue, 0, 0)
         token = await run_search(query, mode, username, wait_seconds)
-        ranked = await runner.call_async(automation.rank_albums, token, prefs, max(1, max_attempts))
+        ranked = await runner.call_async(automation.rank_albums, token, prefs, max(RACE_CANDIDATES, max_attempts))
         attempts = []
 
         if not ranked["albums"]:
@@ -377,25 +408,33 @@ def build_server(runner):
                             f"({ranked['search']['num_files']} files from "
                             f"{ranked['search']['num_users_responded']} users seen)")
 
-        for folder in ranked["albums"]:
-            folder_username = folder["username"]
-            folder_path = folder["folder_path"]
+        remaining = [{
+            **folder,
+            "probe_file": pick_probe_file(
+                [{"basename": item["basename"], "size": item["size_bytes"]} for item in folder["files"]
+                 if is_file_wanted(item["basename"], formats)]
+            )
+        } for folder in ranked["albums"]]
 
-            try:
-                enqueued = await runner.request_folder_download(folder_username, folder_path, download_folder,
-                                                                audio_only)
-            except ToolError as error:
-                attempts.append({"album": folder, "error": str(error)})
+        while remaining:
+            entrants = await runner.sourcer.pick_sources(remaining)
+            remaining = [source for source in remaining if source not in entrants]
+            winner, results = await runner.sourcer.race_sources(entrants, download_folder, wait_for_start_seconds)
+            attempts.append({"race": results})
+
+            if winner is None:
                 continue
 
-            outcome = await runner.wait_for_folder_start(folder_username, folder_path, wait_for_start_seconds)
-            attempts.append({"album": folder, "enqueued": enqueued, "outcome": outcome})
+            try:
+                enqueued = await runner.request_folder_download(
+                    winner["username"], winner["folder_path"], download_folder, audio_only, formats
+                )
 
-            if outcome["started"]:
-                return {"success": True, "token": token, "album": folder, "download": enqueued,
-                        "downloads": outcome["downloads"], "attempts": attempts}
+            except ToolError as error:
+                attempts.append({"source": winner["username"], "error": str(error)})
+                continue
 
-            await runner.call_async(automation.cancel_folder_downloads, folder_username, folder_path, True)
+            return {"success": True, "token": token, "album": winner, "download": enqueued, "attempts": attempts}
 
         return {"success": False, "token": token, "album": None, "download": None, "attempts": attempts,
                 "error": "None of the folders started transferring in time. Try again later, raise "
@@ -418,9 +457,9 @@ def build_server(runner):
     @tool()
     async def wait_for_downloads(
         username: OptionalUsername = None,
-        virtual_paths: _described(list[str] | None, "Only wait for these virtual paths.") = None,
+        virtual_paths: described(list[str] | None, "Only wait for these virtual paths.") = None,
         folder_path: OptionalFolderPath = None,
-        timeout_seconds: _described(int, "Give up waiting after this many seconds (max 600).") = 120
+        timeout_seconds: described(int, "Give up waiting after this many seconds (max 600).") = 120
     ) -> dict:
         """Blocks until the selected downloads (all pending ones by default) are finished or failed,
         or the timeout expires. Returns the final state of each download."""
@@ -484,13 +523,19 @@ def build_server(runner):
 
         return await runner.call_async(automation.retry_download, username, virtual_path)
 
+    register_collection_tools(tool, runner, preferences, run_search)
+
     return server
+
+
+def _stop_on_signal(_signal_number, _frame):
+    raise KeyboardInterrupt
 
 
 class MCPApplication:
 
     def __init__(self, isolated_mode=False, http_port=None, http_host="127.0.0.1", ui_port=DEFAULT_UI_PORT,
-                 ui_host="127.0.0.1", open_ui=False):
+                 ui_host="127.0.0.1", open_ui=False, library_folders=()):
 
         self.isolated_mode = isolated_mode
         self.http_port = http_port
@@ -498,6 +543,7 @@ class MCPApplication:
         self.ui_port = ui_port
         self.ui_host = ui_host
         self.open_ui = open_ui
+        self.library_folders = library_folders
 
     def run(self):
 
@@ -515,9 +561,14 @@ class MCPApplication:
             print(f"Failed to start Nicotine+ core: {error}", file=sys.stderr)
             return 1
 
+        self._start_jobs(runner)
         dashboard = self._start_dashboard(runner)
         server = build_server(runner)
         exit_code = 0
+
+        # The default action ends the process right away, without saving the download list. That
+        # includes after the HTTP server has shut down, as it raises the signal it caught again.
+        signal.signal(signal.SIGTERM, _stop_on_signal)
 
         try:
             if self.http_port:
@@ -536,9 +587,23 @@ class MCPApplication:
             if dashboard is not None:
                 dashboard.stop()
 
+            runner.jobs.stop()
             runner.stop()
 
         return exit_code
+
+    def _start_jobs(self, runner):
+
+        folders = runner.call(runner.automation.get_library_folders).result(15)
+
+        runner.catalog = Catalog()
+        runner.library = LibraryIndex([*folders, *self.library_folders])
+        runner.sourcer = ReleaseSourcer(runner, runner.catalog)
+        runner.jobs = JobManager(
+            runner, runner.sourcer, library=runner.library,
+            store_path=os.path.join(config.data_folder_path, JOBS_FILE_NAME)
+        )
+        runner.jobs.start()
 
     def _start_dashboard(self, runner):
 

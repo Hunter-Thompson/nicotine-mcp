@@ -4,9 +4,9 @@
 """Local web dashboard for the human in the loop.
 
 Serves a single page that shows connection status, downloads (with
-progress, speed and queue position), recent searches with their ranked
-results, and recent log messages. Downloads can be paused, retried or
-removed from the page.
+progress, speed and queue position), collection jobs, recent searches with
+their ranked results, and recent log messages. Downloads can be paused,
+retried or removed from the page, and jobs can be controlled.
 
 The dashboard binds to localhost only. Requests must carry a local
 ``Host`` header (protection against DNS rebinding), and state changing
@@ -30,6 +30,7 @@ from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
 from nicotine_mcp.automation import make_preferences
+from nicotine_mcp.mcp_compat import anyio
 
 LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "[::1]", "::1"}
 REQUEST_HEADER = "X-Requested-With"
@@ -175,6 +176,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             elif url.path.startswith("/api/search/"):
                 self._send_json(self._get_search_results(url.path.rpartition("/")[-1], params))
 
+            elif url.path.startswith("/api/jobs/"):
+                self._send_json(self._get_job(url.path.rpartition("/")[-1], params))
+
             else:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Not found")
 
@@ -214,6 +218,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             elif url.path == "/api/searches/stop":
                 result = {"stopped": self._call(automation.stop_search, int(data["token"]))}
 
+            elif url.path.startswith("/api/jobs/"):
+                result = self._post_job_action(url.path.rpartition("/")[-1], data)
+
             else:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Not found")
                 return
@@ -226,6 +233,33 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except Exception as error:
             self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
 
+    def _post_job_action(self, action, data):
+
+        jobs = self.runner.jobs
+        job_id = data["job_id"]
+
+        if action == "pause":
+            return jobs.pause_job(job_id)
+
+        if action == "resume":
+            return jobs.resume_job(job_id)
+
+        if action == "start-downloads":
+            return jobs.start_downloads(
+                job_id, bool(data.get("accept_partial", False)), bool(data.get("flac_only", False))
+            )
+
+        if action == "retry-missing":
+            return jobs.retry_missing(job_id)
+
+        if action == "cancel":
+            return anyio.run(jobs.cancel_job, job_id)
+
+        if action == "remove":
+            return jobs.remove_job(job_id)
+
+        raise KeyError(f"Unknown job action '{action}'")
+
     def do_OPTIONS(self):  # pylint: disable=invalid-name
         # No CORS: cross-origin pages never get to talk to the dashboard
         self._send_error_json(HTTPStatus.FORBIDDEN, "Cross-origin requests are not allowed")
@@ -237,7 +271,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
         state = self._call(self.runner.automation.get_dashboard_state)
         state["recent_log"] = list(self.runner.recent_log)[-40:]
         state["dashboard_url"] = self.runner.dashboard_url
+        jobs = getattr(self.runner, "jobs", None)
+        state["jobs"] = jobs.list_jobs(include_shelf=True) if jobs is not None else []
         return state
+
+    def _get_job(self, job_id, params):
+
+        if getattr(self.runner, "jobs", None) is None:
+            raise KeyError("Jobs are not available")
+
+        state = params.get("state", [None])[0]
+        limit = int(params.get("limit", ["500"])[0])
+        return self.runner.jobs.get_job(job_id, state=state, limit=limit)
 
     def _get_search_results(self, token, params):
 

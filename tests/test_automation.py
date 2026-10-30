@@ -413,6 +413,94 @@ class AutomationTest(TestCase):
         events.emit("folder-contents-response", msg)
         self.assertEqual(len(results), 1)
 
+    def test_folder_download_in_one_format(self):
+
+        self.fake_login()
+        folder_path = "Music\\Artist\\Album"
+        results = []
+        self.automation.request_folder_download("user", folder_path, results.append, formats=["flac"])
+
+        msg = FolderContentsResponse(directory=folder_path, token=1, shares=None)
+        msg.username = "user"
+        msg.list = {folder_path: [
+            (1, "01 - Track.flac", 30_000_000, None, FileAttributes()),
+            (1, "01 - Track.mp3", 9_000_000, None, FileAttributes()),
+            (1, "cover.jpg", 300_000, None, FileAttributes())
+        ]}
+        events.emit("folder-contents-response", msg)
+
+        self.assertEqual([item["basename"] for item in results[0]["files"]], ["01 - Track.flac", "cover.jpg"])
+        self.assertEqual(results[0]["skipped_files"], ["01 - Track.mp3"])
+
+    def test_folder_listing_downloads_nothing(self):
+
+        self.fake_login()
+        folder_path = "Music\\Artist\\Album"
+        results = []
+
+        self.automation.request_folder_listing("user", folder_path + "\\", results.append)
+        self.assertIn("user" + folder_path, self.automation._pending_folders)
+
+        msg = FolderContentsResponse(directory=folder_path, token=1, shares=None)
+        msg.username = "user"
+        msg.list = {folder_path: [
+            (1, "01 - Track.flac", 30_000_000, None, FileAttributes(length=240)),
+            (1, "cover.jpg", 300_000, None, FileAttributes())
+        ]}
+        events.emit("folder-contents-response", msg)
+
+        self.assertEqual(results[0]["files"], [
+            {"basename": "01 - Track.flac", "size": 30_000_000, "length": 240},
+            {"basename": "cover.jpg", "size": 300_000, "length": 0}
+        ])
+        self.assertEqual(self.automation.get_downloads()["num_downloads"], 0)
+        self.assertEqual(self.automation._pending_folders, {})
+
+    def test_folder_listing_failure(self):
+
+        self.fake_login()
+        results = []
+
+        self.automation.request_folder_listing("user", "Music\\Album", results.append)
+        events.emit("folder-contents-failed", "user", "Music\\Album", is_offline=True)
+
+        self.assertEqual(results[0]["error"], "user is offline")
+        self.assertEqual(self.automation.get_downloads()["num_downloads"], 0)
+
+    def test_discard_download_removes_partial_files(self):
+
+        self.fake_login()
+        virtual_path = "Music\\Album\\01 - Track.flac"
+        self.automation.download_file("user", virtual_path, size=1000)
+
+        incomplete_path = core.downloads.get_incomplete_download_file_path("user", virtual_path)
+        folder_path, basename = os.path.split(incomplete_path)
+        partial_files = [incomplete_path, os.path.join(folder_path, "._" + basename)]
+        unrelated_file = os.path.join(folder_path, "INCOMPLETEunrelated.flac")
+
+        for path in (*partial_files, unrelated_file):
+            with open(path, "w", encoding="utf-8"):
+                pass
+
+        self.addCleanup(os.remove, unrelated_file)
+
+        self.assertTrue(self.automation.discard_download("user", virtual_path))
+
+        self.assertIsNone(self.automation.get_download("user", virtual_path))
+        self.assertFalse(any(os.path.exists(path) for path in partial_files))
+        self.assertTrue(os.path.exists(unrelated_file))
+
+        self.assertFalse(self.automation.discard_download("user", virtual_path))
+
+    def test_library_folders(self):
+
+        config.sections["transfers"]["shared"] = [("music", "/some/music"), ("other", "/other", "extra")]
+        config.sections["transfers"]["buddyshared"] = [("friends", "/friends")]
+
+        self.assertEqual(self.automation.get_library_folders(), [
+            os.path.normpath(DATA_FOLDER_PATH), "/some/music", "/other", "/friends"
+        ])
+
     def test_folder_download_failure_and_fallback(self):
 
         self.fake_login()

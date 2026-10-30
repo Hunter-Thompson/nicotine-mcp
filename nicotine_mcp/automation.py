@@ -13,6 +13,7 @@ and reused without it.
 
 from __future__ import annotations
 
+import os
 import time
 
 from dataclasses import replace
@@ -34,9 +35,12 @@ from nicotine_mcp.ranking import FileCandidate
 from nicotine_mcp.ranking import RankingPreferences
 from nicotine_mcp.ranking import get_extension
 from nicotine_mcp.ranking import is_audio_extension
+from nicotine_mcp.ranking import is_file_wanted
 from nicotine_mcp.ranking import rank_files
 from nicotine_mcp.ranking import rank_folders
 from nicotine_mcp.ranking import summarize_formats
+from nicotine_mcp.speed import SPEEDS_FILE_NAME
+from nicotine_mcp.speed import SpeedTracker
 
 SEARCH_MODES = ("global", "user", "buddies", "rooms")
 
@@ -107,15 +111,19 @@ class CollectedSearch:
 class PendingFolder:
     """A folder whose contents we requested from a user, in order to download it."""
 
-    __slots__ = ("username", "folder_path", "download_folder", "audio_only", "callback", "timer_id")
+    __slots__ = ("username", "folder_path", "download_folder", "audio_only", "callback", "listing_only", "formats",
+                 "timer_id")
 
-    def __init__(self, username, folder_path, download_folder, audio_only, callback):
+    def __init__(self, username, folder_path, download_folder, audio_only, callback, listing_only=False,
+                 formats=None):
 
         self.username = username
         self.folder_path = folder_path
         self.download_folder = download_folder
         self.audio_only = audio_only
         self.callback = callback
+        self.listing_only = listing_only
+        self.formats = formats
         self.timer_id = None
 
     @property
@@ -128,12 +136,21 @@ class Automation:
     MAX_SEARCHES = 25
     MAX_RESULTS_PER_SEARCH = 10000
     FOLDER_REQUEST_TIMEOUT = 20
+    SPEED_SAMPLE_SECONDS = 3
+    SPEED_SAVE_SECONDS = 60
 
     def __init__(self):
 
         self.searches = {}
+        self.speeds = SpeedTracker(os.path.join(config.data_folder_path, SPEEDS_FILE_NAME))
         self._pending_folders = {}
         self._last_search_token = None
+        self._speed_samples = {}
+        self._last_speed_sample_at = None
+        self._last_speed_save_at = time.monotonic()
+        self._speed_timer_id = events.schedule(
+            delay=self.SPEED_SAMPLE_SECONDS, callback=self.sample_speeds, repeat=True
+        )
 
         for event_name, callback in (
             ("add-search", self._add_search),
@@ -148,6 +165,8 @@ class Automation:
     def _quit(self):
 
         self.searches.clear()
+        events.cancel_scheduled(self._speed_timer_id)
+        self.speeds.save()
 
         for pending in list(self._pending_folders.values()):
             self._finish_pending_folder(pending, error="application is quitting")
@@ -335,6 +354,7 @@ class Automation:
                 has_free_slot=has_free_slot,
                 queue_length=queue_length,
                 upload_speed=upload_speed,
+                measured_speed=self.speeds.estimate(username),
                 country_code=country_code,
                 file_attributes=file_attributes
             )
@@ -365,6 +385,7 @@ class Automation:
             "queue_length": candidate.queue_length,
             "upload_speed_bytes": candidate.upload_speed,
             "upload_speed": human_speed(candidate.upload_speed) if candidate.upload_speed else None,
+            "measured_speed": human_speed(candidate.measured_speed) if candidate.measured_speed else None,
             "country_code": candidate.country_code or None,
             "score": candidate.score,
             "score_details": candidate.score_details
@@ -388,6 +409,7 @@ class Automation:
             "queue_length": folder.queue_length,
             "upload_speed_bytes": folder.upload_speed,
             "upload_speed": human_speed(folder.upload_speed) if folder.upload_speed else None,
+            "measured_speed": human_speed(folder.measured_speed) if folder.measured_speed else None,
             "country_code": folder.country_code or None,
             "score": folder.score,
             "score_details": folder.score_details,
@@ -451,6 +473,48 @@ class Automation:
                     candidates[candidate.key] = candidate
 
         return list(candidates.values())
+
+    # Speed measurements #
+
+    def sample_speeds(self):
+        """Measures what active transfers really deliver, for ranking uploaders later on."""
+
+        now = time.monotonic()
+        seconds = now - self._last_speed_sample_at if self._last_speed_sample_at is not None else 0
+        samples = {}
+        delivered = {}
+
+        for transfer in core.downloads.transfers.values():
+            if transfer.status != TransferStatus.TRANSFERRING:
+                continue
+
+            key = transfer.username + transfer.virtual_path
+            current_bytes = transfer.current_byte_offset or 0
+            samples[key] = current_bytes
+            previous_bytes = self._speed_samples.get(key)
+
+            if previous_bytes is not None and current_bytes >= previous_bytes:
+                delivered[transfer.username] = delivered.get(transfer.username, 0) + current_bytes - previous_bytes
+
+        if seconds > 0:
+            for username, num_bytes in delivered.items():
+                self.speeds.record(username, num_bytes / seconds, seconds)
+
+        self._speed_samples = samples
+        self._last_speed_sample_at = now
+
+        if now - self._last_speed_save_at >= self.SPEED_SAVE_SECONDS:
+            self._last_speed_save_at = now
+            self.speeds.save()
+
+    def record_speed(self, username, bytes_per_second, seconds):
+        self.speeds.record(username, bytes_per_second, seconds)
+
+    def record_speed_failure(self, username):
+        self.speeds.record_failure(username)
+
+    def get_uploader_speed(self, username):
+        return self.speeds.estimate(username)
 
     # Downloads #
 
@@ -526,7 +590,27 @@ class Automation:
         )
         return self.get_download(username, virtual_path)
 
-    def _enqueue_folder_files(self, username, folder_path, files, download_folder=None, audio_only=False):
+    def enqueue_probe(self, username, folder_path, basename, size=0, download_folder=None):
+        """Enqueues one file of a folder to the place the whole folder would go,
+        so the rest of the folder can follow if this uploader turns out to be fast."""
+
+        destination = core.downloads.get_folder_destination(
+            username, folder_path, download_folder_path=download_folder or None
+        )
+        return self.download_file(username, "\\".join([folder_path, basename]), destination, size=size)
+
+    def enqueue_files(self, username, folder_path, files, destination):
+        """Enqueues some files of a folder (dicts with a basename and size) to a specific folder."""
+
+        downloads = [
+            self.download_file(username, "\\".join([folder_path, item["basename"]]), destination, size=item["size"])
+            for item in files
+        ]
+        return {"username": username, "folder_path": folder_path, "download_folder": destination,
+                "num_files": len(downloads), "files": downloads}
+
+    def _enqueue_folder_files(self, username, folder_path, files, download_folder=None, audio_only=False,
+                              formats=None):
         """Enqueues files (basename, size, attributes) of a folder into a
         subfolder named after the remote folder, like the GUI does."""
 
@@ -537,7 +621,9 @@ class Automation:
         skipped = []
 
         for basename, size, file_attributes in sorted(files, key=itemgetter(0)):
-            if audio_only and not is_audio_extension(get_extension(basename)):
+            is_skipped_extra = audio_only and not is_audio_extension(get_extension(basename))
+
+            if is_skipped_extra or not is_file_wanted(basename, formats):
                 skipped.append(basename)
                 continue
 
@@ -557,7 +643,8 @@ class Automation:
             "files": enqueued
         }
 
-    def download_folder_from_search(self, username, folder_path, download_folder=None, audio_only=False):
+    def download_folder_from_search(self, username, folder_path, download_folder=None, audio_only=False,
+                                    formats=None):
         """Enqueues the files of a folder that appeared in search results.
 
         Used as a fallback when the user does not answer folder content
@@ -574,11 +661,12 @@ class Automation:
             raise KeyError(f"No search results known for folder '{folder_path}' of user '{username}'")
 
         files = [(candidate.basename, candidate.size, candidate.file_attributes) for candidate in candidates]
-        result = self._enqueue_folder_files(username, folder_path, files, download_folder, audio_only)
+        result = self._enqueue_folder_files(username, folder_path, files, download_folder, audio_only, formats)
         result["partial"] = True
         return result
 
-    def request_folder_download(self, username, folder_path, callback, download_folder=None, audio_only=False):
+    def request_folder_download(self, username, folder_path, callback, download_folder=None, audio_only=False,
+                                formats=None):
         """Requests the full contents of a user's folder and enqueues every
         file once the response arrives.
 
@@ -586,14 +674,31 @@ class Automation:
         describing enqueued files, or with an ``error`` key on failure.
         """
 
+        self._request_folder(
+            PendingFolder(username, folder_path, download_folder, audio_only, callback, formats=formats)
+        )
+
+    def request_folder_listing(self, username, folder_path, callback):
+        """Requests the full contents of a user's folder without downloading anything.
+
+        ``callback(result)`` is invoked in the main loop thread with a dict
+        listing the files, or with an ``error`` key on failure.
+        """
+
+        self._request_folder(PendingFolder(username, folder_path, None, False, callback, listing_only=True))
+
+    def _request_folder(self, pending):
+
+        username = pending.username
+        folder_path = pending.folder_path
+
         if not username or not folder_path:
             raise ValueError("Both username and folder_path are required")
 
         if not self.is_connected():
             raise RuntimeError("Not connected to the Soulseek server. Use the connect tool first.")
 
-        folder_path = folder_path.rstrip("\\")
-        pending = PendingFolder(username, folder_path, download_folder, audio_only, callback)
+        pending.folder_path = folder_path = folder_path.rstrip("\\")
 
         if pending.key in self._pending_folders:
             raise RuntimeError(f"Folder '{folder_path}' of user '{username}' is already being requested")
@@ -619,9 +724,19 @@ class Automation:
                 "folder_path": pending.folder_path,
                 "error": error
             }
+        elif pending.listing_only:
+            result = {
+                "username": pending.username,
+                "folder_path": pending.folder_path,
+                "files": [
+                    {"basename": basename, "size": size, "length": attributes.length or 0}
+                    for basename, size, attributes in files
+                ]
+            }
         else:
             result = self._enqueue_folder_files(
-                pending.username, pending.folder_path, files, pending.download_folder, pending.audio_only
+                pending.username, pending.folder_path, files, pending.download_folder, pending.audio_only,
+                pending.formats
             )
 
         pending.callback(result)
@@ -684,6 +799,18 @@ class Automation:
 
         return selected
 
+    @staticmethod
+    def get_library_folders():
+        """The folders that contain music we already have: downloads and shares."""
+
+        folders = [core.downloads.get_default_download_folder()]
+
+        for option in ("shared", "buddyshared"):
+            for share in config.sections["transfers"][option]:
+                folders.append(share[1])
+
+        return list(dict.fromkeys(folders))
+
     def get_dashboard_state(self):
         """Everything the web dashboard shows, in one call."""
 
@@ -699,6 +826,10 @@ class Automation:
             "status": self.get_status(),
             "download_speed_bytes": total_speed,
             "download_speed": human_speed(total_speed) if total_speed else None,
+            "fastest_uploaders": [
+                {**item, "speed": human_speed(item["speed_bytes"])} for item in self.speeds.fastest()
+            ],
+            "num_uploaders_measured": len(self.speeds),
             "downloads": downloads,
             "searches": [self.get_search_summary(token) for token in reversed(list(self.searches))]
         }
@@ -737,6 +868,29 @@ class Automation:
 
         core.downloads.abort_downloads([transfer])
         return self.describe_transfer(transfer)
+
+    def discard_download(self, username, virtual_path):
+        """Removes a download along with its partial file. The file's name includes the
+        uploader, so nothing can continue it once the download is gone from the list."""
+
+        transfer = self._get_transfer(username, virtual_path)
+
+        if transfer is None:
+            return False
+
+        incomplete_path = core.downloads.get_incomplete_download_file_path(username, virtual_path)
+        folder_path, basename = os.path.split(incomplete_path)
+        core.downloads.clear_downloads([transfer])
+
+        # macOS stores metadata in a "._" file next to it on some external drives
+        for path in (incomplete_path, os.path.join(folder_path, "._" + basename)):
+            try:
+                os.remove(path)
+
+            except OSError:
+                pass
+
+        return True
 
     def cancel_folder_downloads(self, username, folder_path, remove=True):
 

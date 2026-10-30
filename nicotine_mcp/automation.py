@@ -925,6 +925,23 @@ class Automation:
         core.downloads.retry_download(transfer)
         return self.describe_transfer(transfer)
 
+    def pause_all_downloads(self):
+        """Pauses every active or queued download. Partial files are kept."""
+
+        transfers = self.select_downloads(states={DownloadState.ACTIVE, DownloadState.QUEUED})
+        core.downloads.abort_downloads(transfers)
+        return {"num_paused": len(transfers)}
+
+    def resume_all_downloads(self):
+        """Continues every paused download from where it was."""
+
+        transfers = self.select_downloads(states={DownloadState.PAUSED})
+
+        for transfer in transfers:
+            core.downloads.retry_download(transfer)
+
+        return {"num_resumed": len(transfers)}
+
 
 def make_preferences(formats=None, prefer="balanced", min_bitrate=0, require_free_slot=False, max_queue=None,
                      min_length=0, max_length=0, max_per_user=None):

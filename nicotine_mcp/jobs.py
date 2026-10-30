@@ -255,6 +255,7 @@ class JobManager:
 
             job.status = JobStatus.PAUSED
             job.pause_mode = mode
+            job.paused_by_all = False
             self._mark_dirty()
 
         self._save()
@@ -271,10 +272,58 @@ class JobManager:
             job.status = JobStatus.RUNNING
             job.pause_mode = None
             job.finished_at = None
+            job.paused_by_all = False
             self._mark_dirty()
 
         self._save()
         return self.describe_job(job_id)
+
+    def pause_all(self, mode=PauseMode.NOW):
+        """Pauses every job that is running or waiting to retry, and remembers which ones,
+        so that resume_all() continues only those. Jobs paused one by one stay paused."""
+
+        if mode not in PauseMode.ALL:
+            raise ValueError(f"Unknown way to pause '{mode}', expected one of {', '.join(PauseMode.ALL)}")
+
+        with self._lock:
+            paused = []
+
+            for job in self.jobs.values():
+                if job.status not in JobStatus.ACTIVE:
+                    continue
+
+                job.status = JobStatus.PAUSED
+                job.pause_mode = mode
+                job.paused_by_all = True
+                paused.append(job.job_id)
+
+            if paused:
+                self._mark_dirty()
+
+        self._save()
+        return paused
+
+    def resume_all(self):
+        """Continues the jobs that pause_all() paused."""
+
+        with self._lock:
+            resumed = []
+
+            for job in self.jobs.values():
+                if job.status != JobStatus.PAUSED or not job.paused_by_all:
+                    continue
+
+                job.status = JobStatus.RUNNING
+                job.pause_mode = None
+                job.finished_at = None
+                job.paused_by_all = False
+                resumed.append(job.job_id)
+
+            if resumed:
+                self._mark_dirty()
+
+        self._save()
+        return resumed
 
     def _get_item(self, job, release_id):
 
@@ -464,6 +513,7 @@ class JobManager:
             "label_id": job.label_id,
             "artist_id": job.artist_id,
             "pause_mode": job.pause_mode,
+            "paused_by_all": job.paused_by_all,
             "mode": job.mode,
             "status": job.status,
             "blocked_reason": job.blocked_reason,

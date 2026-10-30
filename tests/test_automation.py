@@ -562,6 +562,35 @@ class AutomationTest(TestCase):
         self.assertEqual(self.automation.clear_finished_downloads(), {"num_removed": 1})
         self.assertEqual(self.automation.get_downloads()["num_downloads"], 1)
 
+    def test_pause_and_resume_all_downloads(self):
+
+        self.fake_login()
+
+        for name in ("a", "b", "c", "d"):
+            self.automation.download_file("user", f"Music\\{name}.flac", size=1000)
+
+        transfers = core.downloads.transfers
+        transfers["userMusic\\c.flac"].status = TransferStatus.FINISHED
+        core.downloads.abort_downloads([transfers["userMusic\\d.flac"]], status=TransferStatus.CONNECTION_CLOSED)
+
+        # Only active and queued downloads are paused, finished and failed ones are left alone
+        self.assertEqual(self.automation.pause_all_downloads(), {"num_paused": 2})
+
+        states = {transfer.virtual_path: DownloadState.from_status(transfer.status) for transfer in transfers.values()}
+        self.assertEqual(states, {
+            "Music\\a.flac": DownloadState.PAUSED, "Music\\b.flac": DownloadState.PAUSED,
+            "Music\\c.flac": DownloadState.FINISHED, "Music\\d.flac": DownloadState.FAILED
+        })
+        self.assertEqual(self.automation.pause_all_downloads(), {"num_paused": 0})
+
+        self.assertEqual(self.automation.resume_all_downloads(), {"num_resumed": 2})
+
+        states = {transfer.virtual_path: DownloadState.from_status(transfer.status) for transfer in transfers.values()}
+        self.assertEqual(states["Music\\a.flac"], DownloadState.QUEUED)
+        self.assertEqual(states["Music\\b.flac"], DownloadState.QUEUED)
+        self.assertEqual(states["Music\\d.flac"], DownloadState.FAILED)
+        self.assertEqual(self.automation.resume_all_downloads(), {"num_resumed": 0})
+
     def test_describe_transfer_states(self):
 
         self.fake_login()

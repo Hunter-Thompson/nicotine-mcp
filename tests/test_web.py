@@ -208,6 +208,22 @@ class DashboardTest(TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(payload), {"num_removed": 0})
 
+        # Pause all and resume all, without a job manager
+        self.automation.download_file("user", "Music\\c.flac", size=1000)
+
+        status, _content_type, _payload = self.post("/api/downloads/pause-all", {}, authorized=False)
+        self.assertEqual(status, 403)
+
+        status, _content_type, payload = self.post("/api/downloads/pause-all", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"num_paused": 2, "num_jobs_paused": 0, "jobs_paused": []})
+        self.assertEqual(self.automation.get_downloads(state=DownloadState.PAUSED)["num_downloads"], 2)
+
+        status, _content_type, payload = self.post("/api/downloads/resume-all", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"num_resumed": 2, "num_jobs_resumed": 0, "jobs_resumed": []})
+        self.assertEqual(self.automation.get_downloads(state=DownloadState.PAUSED)["num_downloads"], 0)
+
     def test_search_results_and_stop(self):
 
         token = self.automation.start_search("artist title")
@@ -272,6 +288,16 @@ class DashboardTest(TestCase):
             status, _content_type, payload = self.post(f"/api/jobs/{path}", {"job_id": job_id})
             self.assertEqual(status, 200)
             self.assertEqual(json.loads(payload)["status"], expected_status)
+
+        status, _content_type, payload = self.post("/api/downloads/pause-all", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["jobs_paused"], [job_id])
+        self.assertTrue(self.runner.jobs.describe_job(job_id)["paused_by_all"])
+
+        status, _content_type, payload = self.post("/api/downloads/resume-all", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["jobs_resumed"], [job_id])
+        self.assertEqual(self.runner.jobs.describe_job(job_id)["status"], "running")
 
         status, _content_type, payload = self.post("/api/jobs/start-downloads", {"job_id": job_id})
         self.assertEqual(json.loads(payload)["mode"], "download")

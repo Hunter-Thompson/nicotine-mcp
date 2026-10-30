@@ -934,6 +934,45 @@ class ControlTest(JobTestCase):
         self.steps(1)
         self.assertEqual(len(self.automation.queries), 1)
 
+    def test_pause_all_and_resume_all(self):
+
+        job_a = self.create([self.share_release(1)])
+        job_b = self.manager.create_job(
+            "Other", [self.share_release(2)], label_id="musicbrainz:other", mode="download", search_interval=0
+        )["job_id"]
+        self.manager.pause_job(job_b)  # Paused by hand, so resume_all() leaves it alone
+
+        self.assertEqual(self.manager.pause_all(), [job_a])
+
+        job = self.manager.describe_job(job_a)
+        self.assertEqual(job["status"], JobStatus.PAUSED)
+        self.assertEqual(job["pause_mode"], "now")
+        self.assertTrue(job["paused_by_all"])
+        self.assertFalse(self.manager.describe_job(job_b)["paused_by_all"])
+
+        self.steps(2)
+        self.assertEqual(self.automation.queries, [])
+
+        # Remembered across a restart
+        self.assertTrue(self.make_manager().jobs[job_a].paused_by_all)
+
+        self.assertEqual(self.manager.resume_all(), [job_a])
+        self.assertEqual(self.manager.describe_job(job_a)["status"], JobStatus.RUNNING)
+        self.assertFalse(self.manager.describe_job(job_a)["paused_by_all"])
+        self.assertEqual(self.manager.describe_job(job_b)["status"], JobStatus.PAUSED)
+        self.assertEqual(self.manager.resume_all(), [])
+
+        self.steps(1)
+        self.assertEqual(len(self.automation.queries), 1)
+
+        # Pausing a job by hand after pause_all() takes it out of resume_all()
+        self.assertEqual(self.manager.pause_all(), [job_a])
+        self.manager.pause_job(job_a)
+        self.assertEqual(self.manager.resume_all(), [])
+
+        with self.assertRaises(ValueError):
+            self.manager.pause_all(mode="later")
+
     def test_pause_after_album_finishes_what_has_started(self):
 
         job_id = self.create([self.share_release(1), self.share_release(2, "bob")], max_active_releases=1)

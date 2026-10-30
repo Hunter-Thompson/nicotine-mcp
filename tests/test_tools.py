@@ -157,7 +157,7 @@ class ToolTest(TestCase):
         self.assertLessEqual({
             "find_track_albums", "download_album_for_track", "download_release", "find_label", "get_label_releases",
             "start_label_job", "find_artist", "get_artist_releases", "start_artist_job", "get_job", "list_jobs",
-            "start_job_downloads", "pause_job", "resume_job",
+            "start_job_downloads", "pause_job", "resume_job", "pause_all_downloads", "resume_all_downloads",
             "retry_job_missing", "cancel_job", "get_status", "download_best_album"
         }, names)
 

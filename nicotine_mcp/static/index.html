@@ -242,6 +242,8 @@
       <h2>On the way</h2>
       <div class="switch" id="filters" role="group" aria-label="Filter downloads"></div>
       <span class="spacer"></span>
+      <button class="act" type="button" data-do="pause-all" title="Pause every download and every running job. Partial files are kept.">Pause all</button>
+      <button class="act go" type="button" data-do="resume-all" title="Continue everything that Pause all stopped">Resume all</button>
       <button class="act" type="button" data-do="clear-finished">Clear finished</button>
     </div>
     <div id="hauls"></div>
@@ -784,6 +786,12 @@
       if (data.search) { view.search = Number(data.search); view.group = "album"; await renderDrawer(); renderQueries(view.data.searches); return; }
       if (data.do === "close-drawer") { view.search = null; await renderDrawer(); renderQueries(view.data.searches); return; }
       if (data.do === "clear-finished") { await api("/api/downloads/clear-finished", {}); await refresh(); return; }
+      if (data.do === "pause-all" || data.do === "resume-all") {
+        await api(`/api/downloads/${data.do}`, {});
+        await refresh();
+        await loadOpenCrate();
+        return;
+      }
       if (data.do === "stop-search") { await api("/api/searches/stop", {token: view.search}); await renderDrawer(); await refresh(); }
     } catch (error) {
       $("updated").textContent = `that didn't work: ${error.message}`;

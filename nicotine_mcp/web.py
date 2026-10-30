@@ -206,16 +206,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             data = self._read_json_body()
 
-            if url.path == "/api/downloads/cancel":
-                result = self._call(
-                    automation.cancel_download, data["username"], data["virtual_path"], bool(data.get("remove", True))
-                )
-
-            elif url.path == "/api/downloads/retry":
-                result = self._call(automation.retry_download, data["username"], data["virtual_path"])
-
-            elif url.path == "/api/downloads/clear-finished":
-                result = self._call(automation.clear_finished_downloads)
+            if url.path.startswith("/api/downloads/"):
+                result = self._post_download_action(url.path.rpartition("/")[-1], data)
 
             elif url.path == "/api/searches/stop":
                 result = {"stopped": self._call(automation.stop_search, int(data["token"]))}
@@ -227,6 +219,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 result = self._post_job_action(url.path.rpartition("/")[-1], data)
 
             else:
+                result = None
+
+            if result is None:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Not found")
                 return
 
@@ -237,6 +232,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         except Exception as error:
             self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def _post_download_action(self, action, data):
+
+        automation = self.runner.automation
+        jobs = self.runner.jobs
+
+        if action == "cancel":
+            return self._call(
+                automation.cancel_download, data["username"], data["virtual_path"], bool(data.get("remove", True))
+            )
+
+        if action == "retry":
+            return self._call(automation.retry_download, data["username"], data["virtual_path"])
+
+        if action == "clear-finished":
+            return self._call(automation.clear_finished_downloads)
+
+        if action == "pause-all":
+            # Jobs first, so none of them starts another album while the downloads are being paused
+            jobs_paused = jobs.pause_all(PauseMode.NOW) if jobs is not None else []
+            downloads = self._call(automation.pause_all_downloads)
+            return {**downloads, "num_jobs_paused": len(jobs_paused), "jobs_paused": jobs_paused}
+
+        if action == "resume-all":
+            downloads = self._call(automation.resume_all_downloads)
+            jobs_resumed = jobs.resume_all() if jobs is not None else []
+            return {**downloads, "num_jobs_resumed": len(jobs_resumed), "jobs_resumed": jobs_resumed}
+
+        return None
 
     def _post_job_action(self, action, data):
 

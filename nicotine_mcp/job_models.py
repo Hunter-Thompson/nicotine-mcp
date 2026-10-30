@@ -92,6 +92,7 @@ class Job:
     artist_id: str | None = None
     pause_mode: str | None = None
     transfers_paused: bool = False  # We stopped transfers that have to be started again
+    paused_by_all: bool = False  # Paused by pause_all(), so resume_all() continues it
     status: str = JobStatus.RUNNING
     created_at: float = 0.0
     finished_at: float | None = None

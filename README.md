@@ -149,6 +149,8 @@ reports the dashboard URL to the agent, so it can point you there.
 | `cancel_album`             | Remove or pause every download inside a user's folder |
 | `retry_download`           | Retry a failed or paused download |
 | `clear_finished_downloads` | Remove finished downloads from the list |
+| `pause_all_downloads`      | Pause every download and every running job at once; partial files are kept |
+| `resume_all_downloads`     | Continue everything `pause_all_downloads` stopped |
 | `find_track_albums`        | Which releases a song appears on, according to MusicBrainz |
 | `download_album_for_track` | Download the album a song is on, checked against its tracklist |
 | `download_release`         | Download one specific catalog release, checked against its tracklist |

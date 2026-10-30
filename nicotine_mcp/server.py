@@ -22,6 +22,7 @@ from nicotine_mcp import DEFAULT_UI_PORT
 from nicotine_mcp.automation import Automation
 from nicotine_mcp.automation import DownloadState
 from nicotine_mcp.automation import make_preferences
+from nicotine_mcp.job_models import PauseMode
 from nicotine_mcp.catalog import Catalog
 from nicotine_mcp.collection_tools import register_collection_tools
 from nicotine_mcp.jobs import JOBS_FILE_NAME
@@ -529,6 +530,27 @@ def build_server(runner):
         """Retries a failed or paused download."""
 
         return await runner.call_async(automation.retry_download, username, virtual_path)
+
+    @tool()
+    async def pause_all_downloads() -> dict:
+        """Pauses everything at once: every active or queued download, and every running job, so
+        no new albums start meanwhile. Partial files are kept. resume_all_downloads continues exactly
+        this; jobs that were paused one by one before stay paused."""
+
+        jobs = getattr(runner, "jobs", None)
+        jobs_paused = jobs.pause_all(PauseMode.NOW) if jobs is not None else []
+        downloads = await runner.call_async(automation.pause_all_downloads)
+        return {**downloads, "num_jobs_paused": len(jobs_paused), "jobs_paused": jobs_paused}
+
+    @tool()
+    async def resume_all_downloads() -> dict:
+        """Continues everything that pause_all_downloads stopped: every paused download, from where
+        it was, and the jobs it paused."""
+
+        downloads = await runner.call_async(automation.resume_all_downloads)
+        jobs = getattr(runner, "jobs", None)
+        jobs_resumed = jobs.resume_all() if jobs is not None else []
+        return {**downloads, "num_jobs_resumed": len(jobs_resumed), "jobs_resumed": jobs_resumed}
 
     register_collection_tools(tool, runner, preferences, run_search)
 

@@ -591,6 +591,30 @@ class AutomationTest(TestCase):
         self.assertEqual(states["Music\\d.flac"], DownloadState.FAILED)
         self.assertEqual(self.automation.resume_all_downloads(), {"num_resumed": 0})
 
+    def test_retry_failed_and_disk_usage(self):
+
+        self.fake_login()
+        self.automation.download_file("user", "Music\\a.flac", size=1000)
+        self.automation.download_file("user", "Music\\b.flac", size=1000)
+        transfers = core.downloads.transfers
+        core.downloads.abort_downloads([transfers["userMusic\\a.flac"]], status=TransferStatus.CONNECTION_CLOSED)
+
+        self.assertEqual(self.automation.retry_failed_downloads(), {"num_retried": 1})
+        self.assertEqual(DownloadState.from_status(transfers["userMusic\\a.flac"].status), DownloadState.QUEUED)
+        self.assertEqual(self.automation.retry_failed_downloads(), {"num_retried": 0})
+
+        disk = self.automation.get_disk_usage()
+        self.assertEqual(disk["path"], os.path.normpath(DATA_FOLDER_PATH))
+        self.assertTrue(disk["is_available"])
+        self.assertGreater(disk["total_bytes"], disk["free_bytes"])
+        self.assertIn("disk", self.automation.get_dashboard_state())
+
+        config.sections["transfers"]["downloaddir"] = os.path.join(DATA_FOLDER_PATH, "missing", "drive")
+        disk = self.automation.get_disk_usage()
+        self.assertFalse(disk["is_available"])
+        self.assertGreater(disk["total_bytes"], 0)
+        config.sections["transfers"]["downloaddir"] = DATA_FOLDER_PATH
+
     def test_describe_transfer_states(self):
 
         self.fake_login()

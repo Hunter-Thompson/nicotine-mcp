@@ -108,26 +108,37 @@ The `env` block is only needed if no account is configured in Nicotine+ yet.
 
 ## Dashboard
 
-The dashboard at <http://127.0.0.1:8585/> refreshes every two seconds and
-shows:
+The dashboard at <http://127.0.0.1:8585/> refreshes every two seconds. It is
+laid out for the questions you actually have when an agent is downloading for
+you, in that order:
 
-- the current download speed with its recent history, connection status and
-  the download folder
-- each label being collected as a shelf of record spines, one per release, with
-  thickness following its number of tracks: dim when not searched yet, gray when
-  found, amber filling up while downloading and bright once it has arrived. Click
-  a label or a spine for the releases, and pause, resume, cancel or start
-  downloading from the page
-- downloads grouped by album, with real speed and progress, which open up to
-  the individual files; pause, retry or remove an album or a file
-- the fastest uploaders by measured speed
-- the agent's searches; click one to see its ranked tracks or albums
-- the most recent Nicotine+ log messages
+- **Top bar**: connection status, free space on the download drive, and
+  *Pause all* / *Resume all* for every transfer and job at once. A theme switch
+  and a *Hold* button that stops the page from refreshing while you read.
+- **Overview**: download speed with its recent history and the time left for
+  what is queued; transfers active, queued and done; jobs running, paused and
+  how far they are; and a *Needs attention* card that turns red for failed
+  transfers, blocked jobs, a missing drive or low disk space, with the fix next
+  to it (*Retry all failed*, *Resume all*).
+- **Transfers**: downloads grouped by album, with real speed, time left or the
+  position in the uploader's queue. Filter by state, open an album for its
+  files, and pause, retry or remove an album or a single file.
+- **Crates**: one card per label or artist job with a segmented progress bar
+  (collected, downloading, available, still to search, missing, failed), what
+  it is doing right now, and the actions that make sense in its state: pause
+  after the current album or right now, resume, start a preview's downloads
+  (FLAC only if wanted), search again for missing releases, cancel. *Show
+  releases* lists every release with its status and lets you skip one or move
+  it to the front. `#job-<id>` in the URL opens a job directly.
+- **Side rail**: the agent's searches (click one for the ranked albums or
+  tracks, with measured versus claimed speeds), the fastest uploaders by
+  measured speed, and the recent Nicotine+ log.
 
-It binds to localhost only, rejects requests with a non-local `Host` or
-`Origin` header, and requires a custom header for state changing requests,
-so other websites cannot drive it from your browser. The `get_status` tool
-reports the dashboard URL to the agent, so it can point you there.
+It follows the system theme, works on a phone, and binds to localhost only. It
+rejects requests with a non-local `Host` or `Origin` header and requires a
+custom header for state changing requests, so other websites cannot drive it
+from your browser. The `get_status` tool reports the dashboard URL to the
+agent, so it can point you there.
 
 
 ## Tools

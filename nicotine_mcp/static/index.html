@@ -3,320 +3,455 @@
   SPDX-FileCopyrightText: 2026 nicotine-mcp contributors
   SPDX-License-Identifier: GPL-3.0-or-later
 -->
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nicotine+ MCP</title>
 <style>
-  /* Black wax and sleeve paper. One signal color, amber like a level meter: it means something is moving. */
+  /* Tokens. One accent (amber) means "moving"; green, blue, red carry their usual meanings. */
   :root {
+    --bg: #0f1114; --bg-1: #161a1f; --bg-2: #1d222a; --bg-3: #262c35;
+    --line: rgba(255, 255, 255, .08); --line-2: rgba(255, 255, 255, .14);
+    --fg: #e8ebef; --fg-1: #b4bcc8; --fg-2: #7f8894; --fg-3: #5a626d;
+    --accent: #f5a524; --accent-fg: #1a1200; --accent-soft: rgba(245, 165, 36, .14);
+    --ok: #4ade80; --ok-soft: rgba(74, 222, 128, .14);
+    --info: #60a5fa; --info-soft: rgba(96, 165, 250, .14);
+    --bad: #f87171; --bad-soft: rgba(248, 113, 113, .14);
+    --warn: #fbbf24;
+    --shadow: 0 8px 30px rgba(0, 0, 0, .45);
+    --radius: 10px; --radius-s: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
     color-scheme: dark;
-    --wax: #111110; --wax-raised: #171715; --wax-lifted: #1e1d1a; --wax-well: #0c0c0b;
-    --ink: #ebe6da; --ink-soft: #b4afa0; --ink-faint: #858073; --ink-ghost: #5c584e;
-    --groove: rgba(235, 230, 218, .09); --groove-soft: rgba(235, 230, 218, .05); --groove-firm: rgba(235, 230, 218, .18);
-    --signal: #f0a22e; --signal-wash: rgba(240, 162, 46, .12);
-    --oxide: #e0603f; --oxide-wash: rgba(224, 96, 63, .12); --lamp-on: #9cc46f;
-    --spine-unheard: #2b2a26; --spine-found: #79756a; --spine-yours: #ebe6da; --spine-owned: #a9a496;
-    --type-data: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
-    --type-label: "Avenir Next Condensed", "Roboto Condensed", "Helvetica Neue", "Arial Narrow", sans-serif;
-    --type-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   }
   @media (prefers-color-scheme: light) {
-    :root {
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f4f6; --bg-1: #ffffff; --bg-2: #f8f9fb; --bg-3: #eceef2;
+      --line: rgba(15, 23, 42, .09); --line-2: rgba(15, 23, 42, .16);
+      --fg: #111827; --fg-1: #374151; --fg-2: #6b7280; --fg-3: #9ca3af;
+      --accent: #d97706; --accent-fg: #fff; --accent-soft: rgba(217, 119, 6, .12);
+      --ok: #16a34a; --ok-soft: rgba(22, 163, 74, .12);
+      --info: #2563eb; --info-soft: rgba(37, 99, 235, .12);
+      --bad: #dc2626; --bad-soft: rgba(220, 38, 38, .12);
+      --warn: #d97706;
+      --shadow: 0 8px 30px rgba(15, 23, 42, .12);
       color-scheme: light;
-      --wax: #efeadf; --wax-raised: #f6f2e9; --wax-lifted: #fbf8f1; --wax-well: #e7e1d4;
-      --ink: #1c1a15; --ink-soft: #55513f; --ink-faint: #7f7a69; --ink-ghost: #a6a08e;
-      --groove: rgba(28, 26, 21, .12); --groove-soft: rgba(28, 26, 21, .07); --groove-firm: rgba(28, 26, 21, .26);
-      --signal: #b86c00; --signal-wash: rgba(184, 108, 0, .12);
-      --oxide: #b63c1e; --oxide-wash: rgba(182, 60, 30, .1); --lamp-on: #4f8a26;
-      --spine-unheard: #dcd6c7; --spine-found: #938d7b; --spine-yours: #1c1a15; --spine-owned: #5b5748;
     }
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f4f6; --bg-1: #ffffff; --bg-2: #f8f9fb; --bg-3: #eceef2;
+    --line: rgba(15, 23, 42, .09); --line-2: rgba(15, 23, 42, .16);
+    --fg: #111827; --fg-1: #374151; --fg-2: #6b7280; --fg-3: #9ca3af;
+    --accent: #d97706; --accent-fg: #fff; --accent-soft: rgba(217, 119, 6, .12);
+    --ok: #16a34a; --ok-soft: rgba(22, 163, 74, .12);
+    --info: #2563eb; --info-soft: rgba(37, 99, 235, .12);
+    --bad: #dc2626; --bad-soft: rgba(220, 38, 38, .12);
+    --warn: #d97706;
+    --shadow: 0 8px 30px rgba(15, 23, 42, .12);
+    color-scheme: light;
   }
 
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body { margin: 0; background: var(--wax); color: var(--ink); font: 13px/1.45 var(--type-body); }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font); }
   button { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
-  .data { font-family: var(--type-data); font-variant-numeric: tabular-nums; }
-  .label { font: 600 12px/1 var(--type-label); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); }
-  .quiet { color: var(--ink-faint); }
+  h1, h2, h3 { margin: 0; font-weight: 600; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .muted { color: var(--fg-2); }
+  .faint { color: var(--fg-3); }
   .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-
-  /* The meter: what is coming in right now */
-  .deck { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: auto minmax(120px, 1fr) auto;
-          gap: 8px 28px; align-items: center; padding: 12px 24px; background: var(--wax);
-          border-bottom: 1px solid var(--groove); }
-  .deck-rate { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-  .deck-rate .value { font: 500 34px/1 var(--type-data); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-  .deck-rate.moving .value { color: var(--signal); }
-  .deck-rate .unit { font: 500 13px/1 var(--type-data); color: var(--ink-faint); }
-  .trace { height: 40px; width: 100%; display: block; }
-  .trace path { fill: none; stroke: var(--signal); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
-  .trace path.area { fill: var(--signal-wash); stroke: none; }
-  .trace line { stroke: var(--groove); stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .deck-side { display: flex; align-items: center; gap: 20px; justify-content: flex-end; flex-wrap: wrap; }
-  .tally { display: flex; gap: 14px; }
-  .tally div { display: flex; flex-direction: column; gap: 3px; min-width: 40px; }
-  .tally b { font: 500 15px/1 var(--type-data); font-variant-numeric: tabular-nums; }
-  .tally .bad b { color: var(--oxide); }
-  .lamp { display: flex; align-items: center; gap: 8px; max-width: 320px; }
-  .lamp i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--oxide); }
-  .lamp.on i { background: var(--lamp-on); }
-  .lamp div { min-width: 0; }
-  .lamp strong { display: block; font-weight: 600; }
-  .lamp small { display: block; font: 11px/1.4 var(--type-data); color: var(--ink-faint); }
-
-  /* Layout */
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0; align-items: start; }
-  .floor { min-width: 0; padding: 0 24px 48px; }
-  .rail { position: sticky; top: 65px; max-height: calc(100vh - 65px); overflow: auto; border-left: 1px solid var(--groove);
-          padding: 0 16px 24px; }
-  .part-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 28px; margin: 24px 0 10px; }
-  .part-head h2 { margin: 0; font: 600 13px/1 var(--type-label); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
   .spacer { flex: 1; }
-  .empty { padding: 20px 0; color: var(--ink-faint); }
+  [hidden] { display: none !important; }
 
-  /* Controls */
-  .act { background: transparent; border: 1px solid var(--groove); border-radius: 2px; padding: 3px 8px; font-size: 12px;
-         color: var(--ink-soft); cursor: pointer; white-space: nowrap; transition: border-color .12s, color .12s; }
-  .act:hover { border-color: var(--groove-firm); color: var(--ink); }
-  .act:active { background: var(--wax-lifted); }
-  .act.go { color: var(--signal); border-color: var(--signal); }
-  .act.go:hover { background: var(--signal-wash); color: var(--signal); }
-  .act.stop:hover { border-color: var(--oxide); color: var(--oxide); }
-  .switch { display: flex; gap: 2px; flex-wrap: wrap; }
-  .switch button { background: transparent; border: 0; border-radius: 2px; padding: 3px 7px; font-size: 12px; color: var(--ink-faint); cursor: pointer; }
-  .switch button:hover { color: var(--ink); }
-  .switch button[aria-pressed="true"] { background: var(--wax-lifted); color: var(--ink); }
-  .switch b { font: 400 11px var(--type-data); color: var(--ink-ghost); margin-left: 3px; }
-  .switch button[aria-pressed="true"] b { color: var(--ink-faint); }
+  /* Top bar */
+  .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+         padding: 10px 20px; background: color-mix(in srgb, var(--bg-1) 88%, transparent); backdrop-filter: blur(10px);
+         border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: 6px; }
+  .brand h1 { font-size: 15px; letter-spacing: -.01em; }
+  .brand .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: var(--accent-fg);
+                 display: grid; place-items: center; font-weight: 800; font-size: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px; font-size: 12.5px;
+          background: var(--bg-2); border: 1px solid var(--line); color: var(--fg-1); max-width: 360px; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-3); flex: none; }
+  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+  .pill.off .dot { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+  .pill.warn { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+  .pill strong { font-weight: 600; color: var(--fg); }
+  .nav { display: flex; gap: 2px; margin-left: 6px; }
+  .nav a { color: var(--fg-2); text-decoration: none; font-size: 13px; padding: 5px 9px; border-radius: 6px; }
+  .nav a:hover { color: var(--fg); background: var(--bg-2); }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-2); }
+  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 2s infinite; }
+  .live.held i { background: var(--fg-3); animation: none; }
+  .live.bad i { background: var(--bad); animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
-  /* Crates: a label's catalog as a shelf of record spines */
-  .crate { border-top: 1px solid var(--groove); padding: 14px 0 18px; }
-  .crate:first-of-type { border-top: 0; padding-top: 2px; }
-  .crate-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-  .crate-head h3 { margin: 0; font: 600 21px/1.1 var(--type-label); letter-spacing: .01em; text-transform: uppercase; }
-  .crate-head button.name { all: unset; cursor: pointer; }
-  .crate-head button.name:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
-  .crate-head button.name:hover h3 { color: var(--signal); }
-  .crate-state { font: 12px var(--type-data); color: var(--ink-faint); }
-  .crate-state.blocked { color: var(--oxide); }
-  .crate-state.running { color: var(--signal); }
-  .crate-actions { display: flex; gap: 6px; margin-left: auto; align-self: center; }
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: var(--radius-s); font-size: 13px;
+         font-weight: 500; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--fg-1); cursor: pointer;
+         white-space: nowrap; transition: background .12s, border-color .12s, color .12s; line-height: 1.2; }
+  .btn:hover { background: var(--bg-3); color: var(--fg); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+  .btn.ok:hover { background: var(--ok-soft); }
+  .btn.danger:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 55%, transparent); background: var(--bad-soft); }
+  .btn.sm { padding: 3px 8px; font-size: 12px; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--fg-2); }
+  .btn.ghost:hover { background: var(--bg-2); color: var(--fg); }
+  .btn.icon { padding: 5px 7px; }
+  .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
-  .shelf { display: flex; flex-wrap: wrap; gap: 3px 1px; align-items: flex-end; }
-  .spine { position: relative; display: block; height: 42px; width: var(--thick, 6px); padding: 0; border: 0; cursor: pointer;
-           background: var(--spine-unheard); box-shadow: 0 2px 0 var(--groove-firm); transition: filter .12s; }
-  .spine:hover, .spine:focus-visible { filter: brightness(1.35); z-index: 1; }
-  .spine.found { background: var(--spine-found); }
-  .spine.yours { background: var(--spine-yours); }
-  .spine.owned { background: var(--spine-owned); }
-  .spine.missing { background: transparent; box-shadow: inset 0 0 0 1px var(--groove-firm), 0 2px 0 var(--groove-firm); }
-  .spine.lost { background: var(--oxide); }
-  .spine.gone { background: transparent; box-shadow: 0 2px 0 var(--groove); }
-  .spine.moving { background: linear-gradient(to top, var(--signal) var(--fill, 0%), var(--signal-wash) var(--fill, 0%)); }
-  .spine.picked { outline: 1px solid var(--ink); outline-offset: 1px; }
+  /* Overflow menu, no JS library needed */
+  .menu { position: relative; }
+  .menu > summary { list-style: none; cursor: pointer; }
+  .menu > summary::-webkit-details-marker { display: none; }
+  .menu > div { position: absolute; left: 0; top: calc(100% + 4px); z-index: 15; min-width: 220px; padding: 4px;
+                background: var(--bg-1); border: 1px solid var(--line-2); border-radius: var(--radius-s); box-shadow: var(--shadow); }
+  .menu > div button { display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; background: transparent;
+                       border-radius: 4px; font-size: 13px; cursor: pointer; color: var(--fg-1); }
+  .menu > div button:hover { background: var(--bg-3); color: var(--fg); }
+  .menu > div button.danger { color: var(--bad); }
+  .menu > div hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .menu > div small { display: block; color: var(--fg-3); font-size: 11px; }
 
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font: 11px/1.5 var(--type-data); color: var(--ink-faint); }
-  .legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .legend i { width: 4px; height: 11px; background: var(--spine-unheard); }
-  .legend i.found { background: var(--spine-found); }
-  .legend i.yours { background: var(--spine-yours); }
-  .legend i.owned { background: var(--spine-owned); }
-  .legend i.moving { background: var(--signal); }
-  .legend i.missing, .legend i.gone { background: transparent; box-shadow: inset 0 0 0 1px var(--groove-firm); }
-  .legend i.lost { background: var(--oxide); }
-  .legend b { font-weight: 500; color: var(--ink-soft); }
+  /* Page */
+  main { max-width: 1480px; margin: 0 auto; padding: 18px 20px 60px; display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+         gap: 22px; align-items: start; }
+  .col { min-width: 0; display: grid; gap: 22px; }
+  section { min-width: 0; }
+  .sec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .sec-head h2 { font-size: 15px; }
+  .sec-head .count { font-size: 12px; color: var(--fg-2); background: var(--bg-2); border: 1px solid var(--line); padding: 1px 7px; border-radius: 999px; }
+  .card { background: var(--bg-1); border: 1px solid var(--line); border-radius: var(--radius); }
+  .empty { padding: 26px 18px; color: var(--fg-2); text-align: center; }
+  .empty strong { display: block; color: var(--fg-1); margin-bottom: 4px; }
 
-  .card { position: fixed; z-index: 5; max-width: 320px; pointer-events: none; padding: 8px 10px; background: var(--wax-lifted);
-          border: 1px solid var(--groove-firm); border-radius: 2px; }
-  .card[hidden] { display: none; }
-  .card strong { display: block; font-size: 13px; font-weight: 600; }
-  .card span { display: block; color: var(--ink-soft); }
-  .card small { display: block; margin-top: 3px; font: 11px/1.45 var(--type-data); color: var(--ink-faint); }
+  /* Overview */
+  .overview { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .stat { padding: 12px 14px; display: grid; gap: 4px; position: relative; overflow: hidden; }
+  .stat .k { font-size: 12px; color: var(--fg-2); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .stat .v { font-size: 26px; font-weight: 600; line-height: 1.1; letter-spacing: -.02em; display: flex; align-items: baseline; gap: 6px; }
+  .stat .v small { font-size: 13px; font-weight: 500; color: var(--fg-2); letter-spacing: 0; }
+  .stat .s { font-size: 12.5px; color: var(--fg-2); }
+  .stat.moving .v { color: var(--accent); }
+  .stat.alert { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+  .stat.alert .v { color: var(--bad); }
+  .stat.speed { padding-bottom: 30px; }
+  .stat .spark { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 34px; opacity: .8; pointer-events: none; }
+  .stat .spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .stat .spark path.area { fill: var(--accent-soft); stroke: none; }
+  .stat .actions { margin-top: 2px; }
+
+  /* Attention list */
+  .alerts { grid-column: 1 / -1; display: grid; gap: 8px; }
+  .alert { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius-s);
+           background: var(--bad-soft); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); font-size: 13px; }
+  .alert.warn { background: var(--accent-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .alert.info { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 40%, transparent); }
+  .alert .ic { font-size: 15px; flex: none; }
+
+  /* Chips */
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .chips button { border: 1px solid transparent; background: transparent; color: var(--fg-2); padding: 3px 9px; border-radius: 999px;
+                  font-size: 12.5px; cursor: pointer; }
+  .chips button:hover { color: var(--fg); background: var(--bg-2); }
+  .chips button[aria-pressed="true"] { background: var(--bg-3); color: var(--fg); border-color: var(--line-2); }
+  .chips b { font-weight: 500; color: var(--fg-3); margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .chips button[aria-pressed="true"] b { color: var(--fg-2); }
+
+  /* Badges & status words */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+           background: var(--bg-3); color: var(--fg-1); white-space: nowrap; }
+  .badge.accent { background: var(--accent-soft); color: var(--accent); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.info { background: var(--info-soft); color: var(--info); }
+  .badge.bad { background: var(--bad-soft); color: var(--bad); }
+  .badge.warn { background: var(--accent-soft); color: var(--warn); }
+  .badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.accent i { animation: pulse 1.6s infinite; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--fg-2); border: 1px solid var(--line); }
+
+  /* Progress */
+  .bar { height: 8px; border-radius: 999px; background: var(--bg-3); overflow: hidden; display: flex; }
+  .bar.thin { height: 5px; }
+  .bar > i { display: block; height: 100%; }
+  .bar .finished, .bar .owned-fill { background: var(--ok); }
+  .bar .owned-fill { opacity: .55; }
+  .bar .downloading { background: var(--accent); background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.22) 0 6px, transparent 6px 12px);
+                      animation: stripes 1.2s linear infinite; background-size: 17px 100%; }
+  .bar .sourced { background: var(--info); }
+  .bar .partial, .bar .not_found { background: repeating-linear-gradient(135deg, var(--fg-3) 0 3px, transparent 3px 7px); }
+  .bar .failed, .bar .cancelled, .bar .not_on_label { background: var(--bad); opacity: .85; }
+  .bar .cancelled, .bar .not_on_label { background: var(--fg-3); opacity: .5; }
+  .bar .plain { background: var(--accent); }
+  .bar .plain.done { background: var(--ok); }
+  .bar .plain.paused { background: var(--fg-3); }
+  @keyframes stripes { to { background-position: 17px 0; } }
+  @media (prefers-reduced-motion: reduce) { .bar .downloading, .live i, .badge.accent i { animation: none; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--fg-2); margin-top: 8px; }
+  .legend button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px; border-radius: 4px; }
+  .legend button:hover { background: var(--bg-2); color: var(--fg); }
+  .legend button[aria-pressed="true"] { background: var(--bg-3); color: var(--fg); }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend b { font-weight: 600; color: var(--fg-1); }
+  .swatch.finished { background: var(--ok); } .swatch.owned { background: var(--ok); opacity: .55; }
+  .swatch.downloading { background: var(--accent); } .swatch.sourced { background: var(--info); }
+  .swatch.pending { background: var(--bg-3); border: 1px solid var(--line-2); }
+  .swatch.partial, .swatch.not_found { background: repeating-linear-gradient(135deg, var(--fg-3) 0 2px, transparent 2px 5px); }
+  .swatch.failed { background: var(--bad); } .swatch.cancelled, .swatch.not_on_label { background: var(--fg-3); opacity: .6; }
+
+  /* Jobs */
+  .jobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
+  .job { padding: 14px 16px 12px; display: grid; gap: 10px; transition: border-color .12s; }
+  .job.open { grid-column: 1 / -1; }
+  .job.blocked { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .job-head { display: flex; align-items: flex-start; gap: 10px; }
+  .job-title { min-width: 0; flex: 1; }
+  .job-title h3 { font-size: 16px; line-height: 1.25; }
+  .job-title h3 button { all: unset; cursor: pointer; }
+  .job-title h3 button:hover { color: var(--accent); }
+  .job-title h3 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .job-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: 12.5px; color: var(--fg-2); }
+  .job-line { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+  .job-line .pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .job-activity { font-size: 12.5px; color: var(--fg-2); display: flex; gap: 6px; align-items: center; min-height: 18px; }
+  .job-activity.moving { color: var(--accent); }
+  .job-activity.blocked { color: var(--warn); }
+  .job-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .job-details { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 12px; display: grid; gap: 10px; }
 
   /* Tables */
-  .sheet { width: 100%; border-collapse: collapse; }
-  .sheet th { font: 600 11px/1 var(--type-label); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint);
-              text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--groove); white-space: nowrap; }
-  .sheet td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--groove-soft); vertical-align: baseline; }
-  .sheet tbody tr:hover td { background: var(--groove-soft); }
-  .sheet tr.picked td { background: var(--signal-wash); }
-  .sheet .n { text-align: right; white-space: nowrap; font: 12px var(--type-data); font-variant-numeric: tabular-nums; }
-  .sheet .cat { font: 12px var(--type-data); color: var(--ink-faint); white-space: nowrap; }
-  .sheet .who { font: 12px var(--type-data); color: var(--ink-soft); }
-  .name-cell { max-width: 0; width: 45%; }
-  .name-cell strong { display: block; font-weight: 500; }
-  .name-cell small { display: block; color: var(--ink-faint); font-size: 12px; }
-  .word { font: 11px var(--type-data); white-space: nowrap; color: var(--ink-faint); }
-  .word.moving, .word.active, .word.downloading { color: var(--signal); }
-  .word.yours, .word.finished { color: var(--ink); }
-  .word.lost, .word.failed { color: var(--oxide); }
-  .crate-sheet:not(:empty) { margin-top: 14px; }
-  .crate-sheet .switch { margin-bottom: 8px; }
-  .crate-sheet .note { display: block; max-width: 340px; color: var(--ink-faint); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg-2); font-weight: 600;
+       padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--bg-2); }
+  tr.picked td { background: var(--accent-soft); }
+  td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.name { max-width: 0; width: 40%; }
+  td.name strong { display: block; font-weight: 500; }
+  td.name small { display: block; color: var(--fg-2); font-size: 12px; }
+  td .note { display: block; font-size: 12px; color: var(--fg-2); max-width: 360px; }
+  .word { font-size: 12px; white-space: nowrap; color: var(--fg-2); }
+  .word.downloading, .word.active { color: var(--accent); }
+  .word.finished { color: var(--ok); }
+  .word.failed { color: var(--bad); }
+  .word.sourced, .word.queued { color: var(--info); }
+  .word.owned { color: var(--ok); opacity: .8; }
 
-  /* Transfers, one row per album */
-  .haul { border-top: 1px solid var(--groove-soft); }
-  .haul:first-child { border-top: 1px solid var(--groove); }
-  .haul-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 150px 86px 86px auto; gap: 14px; align-items: center;
-              padding: 8px 0; cursor: pointer; }
-  .haul-row:hover { background: var(--groove-soft); }
-  .haul-row strong { display: block; font-weight: 500; }
-  .haul-row small { display: block; font-size: 12px; color: var(--ink-faint); }
-  .haul-who { font: 12px var(--type-data); color: var(--ink-soft); }
-  .haul-count, .haul-rate { font: 12px var(--type-data); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .haul-rate.moving { color: var(--signal); }
-  .haul-actions { display: flex; gap: 4px; }
-  .level { position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: transparent; }
-  .level div { height: 100%; background: var(--signal); transition: width .5s ease-out; }
-  .level.done div { background: var(--ink-faint); }
-  .haul .sheet { margin: 0 0 10px; }
-  .haul .sheet td:first-child, .haul .sheet th:first-child { padding-left: 14px; }
+  /* Transfers */
+  .haul { border-top: 1px solid var(--line); }
+  .haul:first-child { border-top: 0; }
+  .haul-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 100px auto; gap: 12px; align-items: center; padding: 9px 14px;
+              cursor: pointer; }
+  .haul-row:hover { background: var(--bg-2); }
+  .haul-row strong { display: block; font-weight: 500; font-size: 13.5px; }
+  .haul-row small { display: block; color: var(--fg-2); font-size: 12px; margin-top: 1px; }
+  .haul-row .bar { margin-top: 6px; }
+  .haul-who { color: var(--fg-1); font-size: 13px; }
+  .haul-rate { text-align: right; font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .haul-rate.moving { color: var(--accent); font-weight: 600; }
+  .haul-rate.bad { color: var(--bad); }
+  .haul-rate small { display: block; color: var(--fg-2); font-size: 11.5px; font-weight: 400; }
+  .haul-files { padding: 0 14px 10px 14px; }
+  .haul-files table { font-size: 12.5px; }
+  .haul-files td:first-child, .haul-files th:first-child { padding-left: 8px; }
+  .chev { color: var(--fg-3); font-size: 11px; margin-right: 6px; transition: transform .12s; display: inline-block; }
+  .haul-row[aria-expanded="true"] .chev { transform: rotate(90deg); }
 
   /* Rail */
-  .rail .part-head { margin-top: 18px; }
-  .board { display: grid; gap: 8px; }
-  .board div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; font: 12px var(--type-data); }
-  .board span.rate { color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-  .board i { grid-column: 1 / -1; height: 2px; background: var(--groove-soft); }
-  .board i::before { content: ""; display: block; height: 100%; width: var(--reach, 0%); background: var(--ink-faint); }
-  .board-note { margin: 8px 0 0; font-size: 12px; color: var(--ink-faint); }
-  .queries { display: grid; }
-  .queries button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 5px 4px; cursor: pointer;
-                    border-bottom: 1px solid var(--groove-soft); font-size: 12px; }
-  .queries button:hover, .queries button.picked { background: var(--groove-soft); }
-  .queries button:focus-visible { outline: 2px solid var(--signal); }
-  .queries b { font: 400 11px var(--type-data); color: var(--ink-faint); }
-  .queries .live { color: var(--signal); }
-  pre.log { margin: 0; padding: 8px; background: var(--wax-well); border-radius: 2px; font: 11px/1.55 var(--type-data); color: var(--ink-faint);
-            max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
-  .foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; font: 11px var(--type-data); color: var(--ink-faint); }
-  .foot .bad { color: var(--oxide); }
+  .rail-card { padding: 12px 14px; }
+  .uploaders { display: grid; gap: 7px; }
+  .uploaders div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; font-size: 12.5px; align-items: center; }
+  .uploaders .bar { grid-column: 1 / -1; height: 3px; }
+  .uploaders .bar i { background: var(--info); }
+  .queries { display: grid; gap: 2px; }
+  .queries button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 6px 8px;
+                    border-radius: var(--radius-s); cursor: pointer; font-size: 13px; }
+  .queries button:hover, .queries button.picked { background: var(--bg-2); }
+  .queries button:focus-visible { outline: 2px solid var(--accent); }
+  .queries small { color: var(--fg-2); font-size: 11.5px; display: block; }
+  .queries .n { color: var(--fg-2); font-size: 12px; }
+  pre.log { margin: 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-s);
+            font: 11.5px/1.55 var(--mono); color: var(--fg-1); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  pre.log .lg-dl { color: var(--fg); }
+  pre.log .lg-bad { color: var(--bad); }
+  .rail-foot { font-size: 11.5px; color: var(--fg-3); display: grid; gap: 2px; }
 
-  /* Search results slide over the floor */
-  .drawer { position: fixed; z-index: 4; top: 0; right: 0; bottom: 0; width: min(880px, 100vw); background: var(--wax-raised);
-            border-left: 1px solid var(--groove-firm); overflow: auto; padding: 16px 20px 32px; }
-  .drawer[hidden] { display: none; }
+  /* Drawer */
+  .drawer { position: fixed; z-index: 30; top: 0; right: 0; bottom: 0; width: min(900px, 100vw); background: var(--bg-1);
+            border-left: 1px solid var(--line-2); box-shadow: var(--shadow); overflow: auto; padding: 16px 20px 32px; }
   .drawer-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .drawer-head h2 { margin: 0; font: 600 18px/1.2 var(--type-label); text-transform: uppercase; letter-spacing: .01em; }
+  .drawer-head h2 { font-size: 17px; }
+  .scrim { position: fixed; inset: 0; z-index: 29; background: rgba(0, 0, 0, .35); }
 
-  @media (max-width: 1040px) {
+  /* Toasts */
+  .toasts { position: fixed; z-index: 40; right: 16px; bottom: 16px; display: grid; gap: 8px; max-width: 380px; }
+  .toast { padding: 10px 14px; border-radius: var(--radius-s); background: var(--bg-1); border: 1px solid var(--line-2); box-shadow: var(--shadow);
+           font-size: 13px; animation: rise .18s ease-out; }
+  .toast.bad { border-color: color-mix(in srgb, var(--bad) 55%, transparent); color: var(--bad); }
+  .toast.ok { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+  @keyframes rise { from { transform: translateY(6px); opacity: 0; } }
+
+  @media (max-width: 1100px) {
     main { grid-template-columns: minmax(0, 1fr); }
-    .rail { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--groove); padding: 0 16px 24px; }
-    .deck { grid-template-columns: auto minmax(0, 1fr); padding: 10px 16px; }
-    .deck-side { grid-column: 1 / -1; justify-content: space-between; }
-    .floor { padding: 0 16px 32px; }
+    .overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 640px) {
-    .deck-rate .value { font-size: 26px; }
-    .deck { grid-template-columns: minmax(0, 1fr); }
-    .trace { height: 28px; }
+    main { padding: 12px 12px 40px; gap: 16px; }
+    .top { padding: 8px 12px; gap: 8px; }
+    .top .spacer { display: none; }
+    .nav, .top .pill .path { display: none; }
+    .overview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .stat .v { font-size: 22px; }
+    .jobs { grid-template-columns: minmax(0, 1fr); }
     .haul-row { grid-template-columns: minmax(0, 1fr) auto; }
     .haul-who, .haul-count { display: none; }
-    .haul-actions { grid-column: 1 / -1; }
-    .hide-small { display: none; }
-    .name-cell { width: auto; max-width: 180px; }
+    .haul-row .actions { grid-column: 1 / -1; }
+    .hide-sm { display: none; }
+    td.name { width: auto; max-width: 200px; }
   }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<header class="deck">
-  <div class="deck-rate" id="rate" aria-live="off"><span class="value">0</span><span class="unit">KB/s</span></div>
-  <svg class="trace" id="trace" viewBox="0 0 300 40" preserveAspectRatio="none" role="img" aria-label="Download speed over the last few minutes"></svg>
-  <div class="deck-side">
-    <div class="tally" id="tally"></div>
-    <div class="lamp" id="lamp"><i></i><div><strong>connecting…</strong><small></small></div></div>
-  </div>
+<header class="top">
+  <div class="brand"><span class="logo">N</span><h1>Nicotine+ MCP</h1></div>
+  <span class="pill" id="conn"><span class="dot"></span><span>connecting…</span></span>
+  <span class="pill" id="disk" hidden><span class="dot"></span><span></span></span>
+  <nav class="nav" aria-label="Sections"><a href="#transfers">Transfers</a><a href="#jobs">Crates</a><a href="#searches">Searches</a><a href="#log">Log</a></nav>
+  <span class="spacer"></span>
+  <div class="actions" id="global-actions"></div>
+  <button class="btn ghost icon" id="theme" type="button" title="Switch between light and dark" aria-label="Switch theme">◐</button>
+  <button class="btn ghost sm" id="hold" type="button" title="Stop refreshing the page, e.g. while reading the log">Hold</button>
+  <span class="live" id="live"><i></i><span>live</span></span>
 </header>
 
 <main>
-  <div class="floor">
-    <div class="part-head"><h2>Crates</h2><button class="act" type="button" data-export-state title="Save jobs and downloads to the drive, for another user or Mac">Export</button></div>
-    <div id="crates"></div>
+  <div class="overview" id="overview"></div>
+  <div class="alerts" id="alerts" hidden></div>
 
-    <div class="part-head">
-      <h2>On the way</h2>
-      <div class="switch" id="filters" role="group" aria-label="Filter downloads"></div>
-      <span class="spacer"></span>
-      <button class="act" type="button" data-do="pause-all" title="Pause every download and every running job. Partial files are kept.">Pause all</button>
-      <button class="act go" type="button" data-do="resume-all" title="Continue everything that Pause all stopped">Resume all</button>
-      <button class="act" type="button" data-do="clear-finished">Clear finished</button>
-    </div>
-    <div id="hauls"></div>
+  <div class="col">
+    <section id="transfers">
+      <div class="sec-head">
+        <h2>Transfers</h2><span class="count" id="transfers-count">0</span>
+        <div class="chips" id="filters" role="group" aria-label="Filter transfers"></div>
+        <span class="spacer"></span>
+        <div class="actions" id="transfer-actions"></div>
+      </div>
+      <div class="card" id="hauls"></div>
+    </section>
+
+    <section id="jobs">
+      <div class="sec-head">
+        <h2>Crates</h2><span class="count" id="jobs-count">0</span>
+        <span class="muted" style="font-size:12.5px">label and artist jobs run by the agent</span>
+        <span class="spacer"></span>
+        <button class="btn sm" type="button" data-do="export" title="Save jobs and downloads to the drive, for another user or Mac">Export</button>
+      </div>
+      <div class="jobs" id="crates"></div>
+    </section>
   </div>
 
-  <aside class="rail">
-    <div class="part-head"><h2>Fastest uploaders</h2></div>
-    <div id="board"></div>
-
-    <div class="part-head"><h2>Searches</h2></div>
-    <div class="queries" id="queries"></div>
-
-    <div class="part-head"><h2>Log</h2></div>
-    <pre class="log" id="log" tabindex="0"></pre>
-
-    <div class="foot"><span id="updated">updating…</span><span class="spacer"></span><button class="act" id="hold" type="button">Hold</button></div>
+  <aside class="col">
+    <section id="searches">
+      <div class="sec-head"><h2>Searches</h2><span class="count" id="searches-count">0</span></div>
+      <div class="card rail-card queries" id="queries"></div>
+    </section>
+    <section id="uploaders">
+      <div class="sec-head"><h2>Fastest uploaders</h2><span class="muted" style="font-size:12px" id="measured"></span></div>
+      <div class="card rail-card" id="board"></div>
+    </section>
+    <section id="log">
+      <div class="sec-head"><h2>Log</h2><span class="spacer"></span><button class="btn ghost sm" type="button" data-do="copy-log">Copy</button></div>
+      <pre class="log" id="logbox" tabindex="0"></pre>
+      <div class="rail-foot" id="foot" style="margin-top:8px"></div>
+    </section>
   </aside>
 </main>
 
+<div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" hidden aria-label="Search results"></aside>
-<div class="card" id="card" hidden></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-
   // Everything shared by peers is untrusted: it all goes through this on its way to the page
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
     {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 
   const FILTERS = ["all", "active", "queued", "paused", "failed", "finished"];
-  const LOOKS = {
-    pending: "unheard", sourced: "found", downloading: "moving", finished: "yours", owned: "owned",
-    partial: "missing", not_found: "missing", failed: "lost", not_on_label: "gone", cancelled: "gone"
-  };
+  const STATE_ORDER = ["finished", "owned", "downloading", "sourced", "pending", "partial", "not_found", "failed", "not_on_label", "cancelled"];
   const WORDS = {
-    pending: "to search", sourced: "available", downloading: "downloading", finished: "in the crate", owned: "already yours",
-    partial: "incomplete copies", not_found: "not found", failed: "failed", not_on_label: "not on this label", cancelled: "cancelled"
+    pending: "to search", sourced: "available", downloading: "downloading", finished: "collected", owned: "already owned",
+    partial: "incomplete copies only", not_found: "not found", failed: "failed", not_on_label: "not on this label", cancelled: "cancelled"
   };
-  const LEGEND = ["finished", "owned", "downloading", "sourced", "partial", "not_found", "failed", "pending", "not_on_label", "cancelled"];
   const HISTORY = 90;
-
   const view = {
     filter: "all", held: false, data: null, history: [], openJob: null, jobFilter: "all", jobData: null, pickedTitle: null,
-    openHauls: new Set(), search: null, group: "album", shelves: {}
+    openHauls: new Set(), search: null, group: "album", skew: 0
   };
+
+  // Theme: follows the system unless chosen here (or ?theme= for screenshots)
+  const themeParam = new URLSearchParams(location.search).get("theme");
+  let theme = themeParam || (() => { try { return localStorage.getItem("theme") || "auto"; } catch (e) { return "auto"; } })();
+  const applyTheme = () => { document.documentElement.dataset.theme = theme; };
+  applyTheme();
+  $("theme").addEventListener("click", () => {
+    const isDark = theme === "dark" || (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    theme = isDark ? "light" : "dark";
+    try { localStorage.setItem("theme", theme); } catch (e) { /* private mode */ }
+    applyTheme();
+  });
 
   // Rewriting the same HTML would lose hover and focus every two seconds
   const painted = new Map();
   function paint(element, html) {
-    if (painted.get(element) === html) return;
+    if (painted.get(element) === html) return false;
     painted.set(element, html);
     element.innerHTML = html;
+    return true;
   }
 
+  // Binary units, like Nicotine+ itself
   function splitRate(bytes) {
-    if (bytes >= 1e6) return [(bytes / 1e6).toFixed(bytes >= 1e7 ? 0 : 1), "MB/s"];
-    return [Math.round(bytes / 1e3), "KB/s"];
+    if (bytes >= 1048576) return [(bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1), "MiB/s"];
+    return [String(Math.round(bytes / 1024)), "KiB/s"];
   }
   const showRate = (bytes) => splitRate(bytes).join(" ");
-
   function showSize(bytes) {
-    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-    if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
-    return `${Math.round(bytes / 1e3)} KB`;
+    if (bytes >= 1099511627776) return `${(bytes / 1099511627776).toFixed(2)} TiB`;
+    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)} GiB`;
+    if (bytes >= 1048576) return `${Math.round(bytes / 1048576)} MiB`;
+    return `${Math.round(bytes / 1024)} KiB`;
   }
-
   function showTime(seconds) {
     seconds = Math.max(0, Math.round(seconds));
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   }
+  function ago(timestamp) {
+    const seconds = Math.max(0, Date.now() / 1000 - view.skew - timestamp);
+    if (seconds < 60) return "just now";
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+    return `${Math.floor(seconds / 86400)} d ago`;
+  }
+  function until(timestamp) {
+    const seconds = timestamp - (Date.now() / 1000 - view.skew);
+    if (seconds < 60) return "shortly";
+    if (seconds < 3600) return `in ${Math.round(seconds / 60)} min`;
+    return `in ${(seconds / 3600).toFixed(seconds < 7200 ? 1 : 0)} h`;
+  }
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   async function api(path, body) {
     const options = body === undefined ? {} : {
@@ -330,122 +465,239 @@
     return data;
   }
 
-  // The meter //
+  function toast(message, kind = "") {
+    const box = document.createElement("div");
+    box.className = `toast ${kind}`;
+    box.textContent = message;
+    $("toasts").appendChild(box);
+    setTimeout(() => box.remove(), kind === "bad" ? 7000 : 3500);
+  }
 
-  function renderDeck(data) {
+  // Top bar & overview //
+
+  function renderTop(data) {
     const status = data.status;
+    const conn = $("conn");
+    conn.className = `pill ${status.connected ? "on" : "off"}`;
+    const who = status.connected ? `<strong>${esc(status.username)}</strong> <span class="muted">${esc(status.status)}</span>`
+      : status.needs_credentials ? `<strong>Offline</strong> <span class="muted">no account configured</span>`
+      : `<strong>Offline</strong> <span class="muted">reconnecting…</span>`;
+    paint(conn, `<span class="dot"></span><span class="ellipsis">${who}</span>`);
+
+    const disk = data.disk;
+    const diskPill = $("disk");
+    if (disk) {
+      diskPill.hidden = false;
+      const low = disk.free_bytes < 10e9;
+      diskPill.className = `pill ${disk.is_available ? (low ? "warn" : "") : "off"}`;
+      const text = disk.is_available ? `${showSize(disk.free_bytes)} free` : "download drive missing";
+      paint(diskPill, `<span class="dot" style="background:${disk.is_available ? (low ? "var(--warn)" : "var(--info)") : "var(--bad)"}"></span>` +
+        `<span class="ellipsis" title="${esc(disk.path)}">${esc(text)} <span class="path muted">· ${esc(disk.path)}</span></span>`);
+    } else {
+      diskPill.hidden = true;
+    }
+
+    const jobs = data.jobs || [];
+    const anyRunning = jobs.some((job) => job.status === "running" || job.status === "waiting_retry");
+    const counts = status.downloads;
+    const pausedByAll = jobs.some((job) => job.paused_by_all);
+    const canPause = counts.active || counts.queued || anyRunning;
+    const canResume = counts.paused || pausedByAll;
+    paint($("global-actions"),
+      (canPause ? `<button class="btn sm" type="button" data-do="pause-all" title="Pause every transfer and every running job. Partial files are kept.">⏸ Pause all</button>` : "") +
+      (canResume ? `<button class="btn sm ok" type="button" data-do="resume-all" title="Continue everything that Pause all stopped">▶ Resume all</button>` : ""));
+  }
+
+  function sparkline(history) {
+    if (!history.some(Boolean)) return "";
+    const peak = Math.max(...history, 1);
+    const step = 200 / (HISTORY - 1);
+    const offset = (HISTORY - history.length) * step;
+    const points = history.map((item, index) => `${(offset + index * step).toFixed(1)} ${(53 - item / peak * 48).toFixed(1)}`);
+    if (points.length < 2) return "";
+    const line = `M${points.join("L")}`;
+    return `<svg class="spark" viewBox="0 0 200 54" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="${line}L200 54L${offset.toFixed(1)} 54Z"></path><path d="${line}"></path></svg>`;
+  }
+
+  function renderOverview(data) {
+    const status = data.status;
+    const counts = status.downloads;
     const speed = data.download_speed_bytes || 0;
     view.history.push(speed);
     if (view.history.length > HISTORY) view.history.shift();
-
     const [value, unit] = splitRate(speed);
-    const rate = $("rate");
-    rate.classList.toggle("moving", speed > 0);
-    rate.children[0].textContent = value;
-    rate.children[1].textContent = unit;
 
-    const peak = Math.max(...view.history, 1);
-    const step = 300 / (HISTORY - 1);
-    const offset = (HISTORY - view.history.length) * step;
-    const points = view.history.map((item, index) => `${(offset + index * step).toFixed(1)} ${(39 - item / peak * 36).toFixed(1)}`);
-    const trace = points.length > 1 ? `M${points.join("L")}` : "";
-    const area = points.length > 1 ? `${trace}L300 40L${offset.toFixed(1)} 40Z` : "";
-    $("trace").innerHTML = `<line x1="0" y1="39.5" x2="300" y2="39.5"></line><path class="area" d="${area}"></path><path d="${trace}"></path>`;
+    const jobs = data.jobs || [];
+    const running = jobs.filter((job) => job.status === "running" || job.status === "waiting_retry").length;
+    const paused = jobs.filter((job) => job.status === "paused").length;
+    const blocked = jobs.filter((job) => job.blocked_reason && job.status !== "paused" && job.status !== "cancelled").length;
+    const collected = jobs.reduce((sum, job) => sum + (job.counts.finished || 0), 0);
+    const downloadingReleases = jobs.reduce((sum, job) => sum + (job.counts.downloading || 0), 0);
+    const toSearch = jobs.reduce((sum, job) => sum + (job.counts.pending || 0), 0);
+    const problems = counts.failed + blocked;
 
-    const counts = status.downloads;
-    const tally = [["active", "Active"], ["queued", "Queued"], ["failed", "Failed"], ["finished", "Done"]];
-    paint($("tally"), tally.map(([key, label]) => (
-      `<div class="${key === "failed" && counts[key] ? "bad" : ""}"><span class="label">${label}</span><b>${counts[key]}</b></div>`
-    )).join(""));
+    const etaBytes = data.downloads.filter((d) => d.state === "active" || d.state === "queued")
+      .reduce((sum, d) => sum + Math.max(0, d.size_bytes - d.bytes_transferred), 0);
+    const eta = speed > 0 && etaBytes > 0 ? `≈ ${showTime(etaBytes / speed)} left for ${showSize(etaBytes)}` : (etaBytes ? `${showSize(etaBytes)} to go` : "nothing queued");
 
-    const lamp = $("lamp");
-    lamp.classList.toggle("on", status.connected);
-    const name = status.connected ? status.username : (status.needs_credentials ? "no account configured" : "offline");
-    paint(lamp.lastElementChild, `<strong class="ellipsis">${esc(name)}</strong>` +
-      `<small class="ellipsis" title="${esc(status.download_folder)}">${esc(status.download_folder)}</small>`);
+    paint($("overview"), `
+      <div class="card stat speed ${speed ? "moving" : ""}">
+        <div class="k">Download speed</div>
+        <div class="v num">${value}<small>${unit}</small></div>
+        <div class="s">${esc(eta)}</div>
+        ${sparkline(view.history)}
+      </div>
+      <div class="card stat">
+        <div class="k">Transfers</div>
+        <div class="v num">${counts.active}<small>active</small></div>
+        <div class="s">${plural(counts.queued, "file")} queued · ${counts.paused ? `${counts.paused} paused · ` : ""}${counts.finished} done</div>
+      </div>
+      <div class="card stat">
+        <div class="k">Crates</div>
+        <div class="v num">${running}<small>${running === 1 ? "job" : "jobs"} running</small></div>
+        <div class="s">${paused ? `${paused} paused · ` : ""}${downloadingReleases ? `${plural(downloadingReleases, "release")} downloading · ` : ""}${collected} collected · ${toSearch} to search</div>
+      </div>
+      <div class="card stat ${problems ? "alert" : ""}">
+        <div class="k">Needs attention</div>
+        <div class="v num">${problems}<small>${problems === 1 ? "issue" : "issues"}</small></div>
+        <div class="s">${problems ? [counts.failed ? plural(counts.failed, "failed transfer") : "", blocked ? plural(blocked, "blocked job") : ""].filter(Boolean).join(" · ") : "all clear"}</div>
+        ${counts.failed ? `<div class="actions"><button class="btn sm" type="button" data-do="retry-failed">Retry all failed</button></div>` : ""}
+      </div>`);
+
+    const alerts = [];
+    if (!status.connected) {
+      alerts.push(status.needs_credentials
+        ? `<div class="alert"><span class="ic">⚠</span><div>No Soulseek account is configured. Set NICOTINE_USERNAME and NICOTINE_PASSWORD, or log in once with Nicotine+.</div></div>`
+        : `<div class="alert"><span class="ic">⚠</span><div>Not connected to Soulseek. Transfers and jobs continue once the login succeeds; the log below says why it fails.</div></div>`);
+    }
+    if (data.disk && !data.disk.is_available) {
+      alerts.push(`<div class="alert"><span class="ic">⚠</span><div>The download folder <span class="mono">${esc(data.disk.path)}</span> is not reachable. Jobs wait instead of writing to the system disk. Is the drive connected?</div></div>`);
+    } else if (data.disk && data.disk.free_bytes < 10e9) {
+      alerts.push(`<div class="alert warn"><span class="ic">⚠</span><div>Only ${showSize(data.disk.free_bytes)} left on the download drive.</div></div>`);
+    }
+    if (jobs.some((job) => job.paused_by_all)) {
+      alerts.push(`<div class="alert info"><span class="ic">⏸</span><div>Everything is paused.</div><span class="spacer"></span><button class="btn sm ok" type="button" data-do="resume-all">Resume all</button></div>`);
+    }
+    for (const job of jobs) {
+      if (job.blocked_reason && job.status !== "paused" && job.status !== "cancelled" && status.connected && !(data.disk && !data.disk.is_available)) {
+        alerts.push(`<div class="alert warn"><span class="ic">⚠</span><div><strong>${esc(job.name)}</strong> is blocked: ${esc(job.blocked_reason)}</div></div>`);
+      }
+    }
+    $("alerts").hidden = !alerts.length;
+    paint($("alerts"), alerts.join(""));
   }
 
-  // Crates //
+  // Crates (jobs) //
 
-  function thickness(item) {
-    return Math.min(14, Math.max(4, 3 + (item.track_count || 2) * 0.8));
+  function jobProgress(job) {
+    const total = job.num_releases || 1;
+    const segments = STATE_ORDER.filter((state) => job.counts[state]).map((state) => {
+      const cls = state === "owned" ? "owned-fill" : state;
+      return `<i class="${cls}" style="width:${(job.counts[state] / total * 100).toFixed(2)}%" title="${job.counts[state]} ${esc(WORDS[state])}"></i>`;
+    }).join("");
+    return `<div class="bar" role="img" aria-label="Progress by release">${segments}</div>`;
   }
 
-  function sortedShelf(job) {
-    return [...(job.shelf || [])].sort((a, b) => (
-      (a.year || 9999) - (b.year || 9999) || String(a.catalog_number || "").localeCompare(String(b.catalog_number || ""), undefined, {numeric: true})
-    ));
+  function jobBadge(job) {
+    const c = job.counts;
+    if (job.status === "cancelled") return `<span class="badge">Cancelled</span>`;
+    if (job.status === "finished") return `<span class="badge ok">Finished</span>`;
+    if (job.status === "previewed") return `<span class="badge info">Preview ready</span>`;
+    if (job.status === "paused") return job.paused_by_all ? `<span class="badge">Paused (all)</span>` : `<span class="badge">Paused</span>`;
+    if (job.status === "waiting_retry") return `<span class="badge info">Waiting to retry</span>`;
+    if (job.blocked_reason) return `<span class="badge warn"><i></i>Waiting</span>`;
+    if (job.mode === "preview") return `<span class="badge accent"><i></i>Previewing</span>`;
+    return `<span class="badge accent"><i></i>${c.downloading ? "Downloading" : "Searching"}</span>`;
+  }
+
+  function jobActivity(job, shelf) {
+    const c = job.counts;
+    if (job.status === "paused") {
+      if (c.downloading && job.pause_mode !== "now") return ["", `${plural(c.downloading, "album")} finishing, then nothing new starts`];
+      return ["", `paused${job.pause_mode === "now" ? " where it was" : ""}${c.pending ? ` · ${c.pending} still to search` : ""}`];
+    }
+    if (job.status === "cancelled") return ["", `cancelled ${ago(job.finished_at || job.created_at)}`];
+    if (job.status === "finished") return ["", `finished ${ago(job.finished_at || job.created_at)}`];
+    if (job.status === "previewed") return ["", `${job.num_available} available${job.num_available_flac ? `, ${job.num_available_flac} as FLAC` : ""} · nothing downloaded yet`];
+    if (job.status === "waiting_retry") return ["", `searching again ${job.next_retry_at ? until(job.next_retry_at) : "later"} for ${plural((c.not_found || 0) + (c.partial || 0), "missing release")}`];
+    if (job.blocked_reason) return ["blocked", job.blocked_reason];
+    const moving = (shelf || []).filter((item) => item.state === "downloading" && !item.is_queued);
+    if (moving.length) {
+      const item = moving.sort((a, b) => b.progress_percent - a.progress_percent)[0];
+      const more = moving.length > 1 ? ` +${moving.length - 1} more` : "";
+      return ["moving", `↓ ${item.title} · ${Math.round(item.progress_percent)}%${item.uploader ? ` from ${item.uploader}` : ""}${more}`];
+    }
+    if (c.downloading) return ["", `${plural(c.downloading, "album")} waiting in uploader queues`];
+    if (job.mode === "preview") return ["moving", `looking around · ${c.pending || 0} left to search`];
+    return ["moving", c.pending ? `searching · ${c.pending} left` : "collecting"];
   }
 
   function jobActions(job) {
-    const act = (name, label, kind = "") =>
-      `<button class="act ${kind}" type="button" data-job-do="${name}" data-job="${esc(job.job_id)}">${label}</button>`;
-    const buttons = [];
     const c = job.counts;
+    const id = esc(job.job_id);
+    const act = (name, label, cls = "btn sm", extra = "") => `<button class="${cls}" type="button" data-job-do="${name}" data-job="${id}" ${extra}>${label}</button>`;
+    const primary = [];
+    const more = [];
+    const isActive = job.status === "running" || job.status === "waiting_retry";
     if (job.mode === "preview" && job.status !== "cancelled" && job.num_available) {
-      buttons.push(act("start-downloads", `Download ${job.num_available}`, "go"));
-      const isFlacJob = (job.formats || []).join() === "flac";
-      if (!isFlacJob) buttons.push(`<button class="act go" type="button" data-job-do="start-downloads" data-flac="1" data-job="${esc(job.job_id)}" title="Strictly FLAC. ${job.num_available_flac} have a FLAC copy already, the others are searched for again.">FLAC only (${job.num_available_flac}+)</button>`);
+      primary.push(act("start-downloads", `Download ${job.num_available}`, "btn sm primary"));
+      if ((job.formats || []).join() !== "flac") {
+        more.push(`<button type="button" data-job-do="start-downloads" data-flac="1" data-job="${id}">Download, FLAC only<small>${job.num_available_flac} have a FLAC copy, the rest are searched for again</small></button>`);
+      }
     }
-    const pauseNow = (label) => `<button class="act" type="button" data-job-do="pause" data-now="1" data-job="${esc(job.job_id)}" title="Stops right away. Albums continue from where they were on resuming.">${label}</button>`;
-    if (job.status === "running" || job.status === "waiting_retry") {
-      buttons.push(`<button class="act" type="button" data-job-do="pause" data-job="${esc(job.job_id)}" title="Albums that have started finish, nothing new starts.">Pause after album</button>`);
-      if (c.downloading) buttons.push(pauseNow("Pause now"));
+    if (isActive) {
+      primary.push(act("pause", "Pause", "btn sm", `title="Albums that have started finish, nothing new starts"`));
+      if (c.downloading) more.push(`<button type="button" data-job-do="pause" data-now="1" data-job="${id}">Pause now<small>Stops transfers right away, they continue on resuming</small></button>`);
     }
     if (job.status === "paused") {
-      buttons.push(act("resume", "Resume"));
-      if (c.downloading && job.pause_mode !== "now") buttons.push(pauseNow("Stop now"));
+      primary.push(act("resume", "Resume", "btn sm primary"));
+      if (c.downloading && job.pause_mode !== "now") more.push(`<button type="button" data-job-do="pause" data-now="1" data-job="${id}">Stop transfers now</button>`);
     }
-    if (c.not_found || c.partial) buttons.push(act("retry-missing", "Search again"));
-    if (job.status === "running" || job.status === "paused" || job.status === "waiting_retry") buttons.push(act("cancel", "Cancel", "stop"));
-    else buttons.push(act("remove", "Remove", "stop"));
-    return buttons.join("");
-  }
-
-  function crateState(job) {
-    if (job.blocked_reason) return ["blocked", job.blocked_reason];
-    if (job.status === "paused" && job.counts.downloading && job.pause_mode !== "now") return ["running", `finishing ${job.counts.downloading} ${job.counts.downloading === 1 ? "album" : "albums"}, then paused`];
-    const left = job.num_remaining_to_search;
-    if (job.status === "running" && job.mode === "preview") return ["running", `looking for it, ${left} left to search`];
-    if (job.status === "running") return ["running", left ? `collecting, ${left} left to search` : "collecting"];
-    if (job.status === "previewed") return ["", "preview finished, nothing downloaded"];
-    if (job.status === "waiting_retry") return ["", `searching again ${new Date(job.next_retry_at * 1000).toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"})}`];
-    return ["", job.status];
+    if (c.not_found || c.partial) more.push(`<button type="button" data-job-do="retry-missing" data-job="${id}">Search again for ${plural((c.not_found || 0) + (c.partial || 0), "missing release")}</button>`);
+    more.push(`<hr>`);
+    if (isActive || job.status === "paused") more.push(`<button type="button" class="danger" data-job-do="cancel" data-job="${id}">Cancel job<small>Unfinished downloads are removed, finished files stay</small></button>`);
+    else more.push(`<button type="button" class="danger" data-job-do="remove" data-job="${id}">Remove from list<small>Files stay on disk</small></button>`);
+    const menu = `<details class="menu"><summary class="btn sm icon" aria-label="More actions" title="More">⋯</summary><div>${more.join("")}</div></details>`;
+    return primary.join("") + menu;
   }
 
   function renderCrates(jobs) {
+    $("jobs-count").textContent = jobs.length;
     if (!jobs.length) {
-      paint($("crates"), `<div class="empty">No crates yet. Ask your agent to collect a label or an artist's discography, and it shows up here as a shelf of records.</div>`);
+      paint($("crates"), `<div class="card empty" style="grid-column:1/-1"><strong>No crates yet</strong>Ask your agent to collect a label or an artist's discography. It shows up here with every release and its progress.</div>`);
       return;
     }
-    view.shelves = {};
     const before = painted.get($("crates"));
     paint($("crates"), jobs.map((job) => {
-      const shelf = sortedShelf(job);
-      view.shelves[job.job_id] = shelf;
-      const [stateClass, stateText] = crateState(job);
-      const spines = shelf.map((item, index) => {
-        const look = LOOKS[item.state] || "unheard";
-        const fill = look === "moving" ? `;--fill:${item.progress_percent}%` : "";
-        const picked = job.job_id === view.openJob && view.pickedTitle === item.title ? " picked" : "";
-        return `<button class="spine ${look}${picked}" type="button" style="--thick:${thickness(item).toFixed(0)}px${fill}" ` +
-               `data-job-open="${esc(job.job_id)}" data-spine="${index}" aria-label="${esc(item.artist)} – ${esc(item.title)}: ${esc(WORDS[item.state])}"></button>`;
-      }).join("");
-      const legend = LEGEND.filter((state) => job.counts[state]).map((state) => (
-        `<span><i class="${LOOKS[state]}"></i><b>${job.counts[state]}</b> ${esc(WORDS[state])}</span>`
+      const [actClass, actText] = jobActivity(job, job.shelf);
+      const total = job.num_releases || 0;
+      const done = (job.counts.finished || 0) + (job.counts.owned || 0);
+      const pct = total ? Math.round(done / total * 100) : 0;
+      const isOpen = view.openJob === job.job_id;
+      const legend = STATE_ORDER.filter((state) => job.counts[state]).map((state) => (
+        `<button type="button" data-job-filter="${state}" data-job="${esc(job.job_id)}" aria-pressed="${isOpen && view.jobFilter === state}"><i class="swatch ${state}"></i><b>${job.counts[state]}</b> ${esc(WORDS[state])}</button>`
       )).join("");
-      return `<article class="crate">
-        <div class="crate-head">
-          <button class="name" type="button" data-job-open="${esc(job.job_id)}" aria-expanded="${job.job_id === view.openJob}"><h3>${esc(job.name)}</h3></button>
-          <span class="crate-state">${job.num_releases < job.num_in_catalog ? `only ${job.num_releases} of ${job.num_in_catalog} releases` : `${job.num_releases} releases`}</span>
-          ${job.artist_id ? `<span class="crate-state">artist</span>` : ""}
-          ${(job.formats || []).join() === "flac" ? `<span class="crate-state">FLAC only</span>` : ""}
-          <span class="crate-state ${stateClass}">${esc(stateText)}</span>
-          <div class="crate-actions">${jobActions(job)}</div>
+      return `<article class="card job ${isOpen ? "open" : ""} ${job.blocked_reason && job.status === "running" ? "blocked" : ""}" id="job-${esc(job.job_id)}">
+        <div class="job-head">
+          <div class="job-title">
+            <h3><button type="button" data-job-open="${esc(job.job_id)}" aria-expanded="${isOpen}">${esc(job.name)}</button></h3>
+            <div class="job-meta">
+              <span>${job.artist_id ? "artist" : "label"}</span><span>·</span>
+              <span>${job.num_releases < job.num_in_catalog ? `${job.num_releases} of ${job.num_in_catalog} releases` : plural(job.num_releases, "release")}</span>
+              ${(job.formats || []).join() === "flac" ? `<span class="tag">FLAC only</span>` : ""}
+              ${job.mode === "preview" ? `<span class="tag">preview</span>` : ""}
+              <span class="faint">· started ${ago(job.created_at)}</span>
+            </div>
+          </div>
+          ${jobBadge(job)}
         </div>
-        <div class="shelf">${spines}</div>
+        ${jobProgress(job)}
+        <div class="job-line"><span class="pct">${pct}%</span><span class="muted">${done} of ${total} collected</span></div>
+        <div class="job-activity ${actClass}"><span class="ellipsis" title="${esc(actText)}">${esc(actText)}</span></div>
         <div class="legend">${legend}</div>
-        <div class="crate-sheet" data-sheet="${esc(job.job_id)}"></div>
+        <div class="job-foot"><div class="actions">${jobActions(job)}</div><span class="spacer"></span>
+          <button class="btn ghost sm" type="button" data-job-open="${esc(job.job_id)}">${isOpen ? "Hide releases" : "Show releases"}</button></div>
+        <div class="job-details" data-sheet="${esc(job.job_id)}" ${isOpen ? "" : "hidden"}></div>
       </article>`;
     }).join(""));
     if (before !== painted.get($("crates"))) renderOpenCrate();
@@ -453,42 +705,42 @@
 
   function releaseActions(job, item) {
     if (job.status === "cancelled" || item.state === "finished" || item.state === "owned") return "";
-    const act = (name, label, title) => `<button class="act" type="button" data-job-do="${name}" data-job="${esc(job.job_id)}" data-release="${esc(item.release_id)}" title="${title}">${label}</button>`;
+    const act = (name, label, title) => `<button class="btn sm ghost" type="button" data-job-do="${name}" data-job="${esc(job.job_id)}" data-release="${esc(item.release_id)}" title="${title}">${label}</button>`;
     const buttons = [];
     if (item.state !== "downloading") buttons.push(act("prioritize-release", item.state === "pending" || item.state === "sourced" ? "Next" : "Try again", "Work on this one next"));
     if (item.state !== "cancelled" && item.state !== "not_on_label") buttons.push(act("skip-release", "Skip", "Leave this one out"));
-    return buttons.join(" ");
+    return buttons.join("");
   }
 
   function renderOpenCrate() {
     document.querySelectorAll("[data-sheet]").forEach((box) => {
-      if (box.dataset.sheet !== view.openJob || !view.jobData) { box.innerHTML = ""; delete box.dataset.painted; return; }
+      if (box.dataset.sheet !== view.openJob) { box.hidden = true; box.innerHTML = ""; delete box.dataset.painted; return; }
+      box.hidden = false;
+      if (!view.jobData) { if (!box.innerHTML) box.innerHTML = `<div class="muted">Loading releases…</div>`; return; }
       const job = view.jobData;
-      const names = ["all", ...LEGEND.filter((state) => job.counts[state])];
+      const names = ["all", ...STATE_ORDER.filter((state) => job.counts[state])];
       const tabs = names.map((name) => {
         const count = name === "all" ? job.num_releases : job.counts[name];
-        return `<button type="button" data-job-filter="${name}" aria-pressed="${name === view.jobFilter}">${esc(name === "all" ? "everything" : WORDS[name])}<b>${count}</b></button>`;
+        return `<button type="button" data-job-filter="${name}" data-job="${esc(job.job_id)}" aria-pressed="${name === view.jobFilter}">${esc(name === "all" ? "all" : WORDS[name])}<b>${count}</b></button>`;
       }).join("");
       const rows = job.releases.filter((item) => view.jobFilter === "all" || item.state === view.jobFilter);
       const body = rows.map((item) => {
         let detail = item.note || "";
-        if (item.state === "downloading" && !item.is_queued) detail = `${item.num_files_finished}/${item.num_files} files · ${item.progress_percent}%${item.speed_bytes ? ` · ${showRate(item.speed_bytes)}` : ""}`;
+        if (item.state === "downloading" && !item.is_queued) detail = `${item.num_files_finished}/${item.num_files} files · ${Math.round(item.progress_percent)}%${item.speed_bytes ? ` · ${showRate(item.speed_bytes)}` : ""}`;
+        else if (item.state === "downloading" && item.is_queued) detail = "waiting in the uploader's queue";
         else if (item.state === "partial" && item.best_partial_copy) detail = `best copy has ${item.best_partial_copy.num_matched} of ${item.best_partial_copy.num_expected} tracks`;
         else if (item.local_path) detail = item.local_path;
-        const look = LOOKS[item.state] || "";
+        const progress = item.state === "downloading" && !item.is_queued ? `<div class="bar thin" style="margin-top:4px;max-width:220px"><i class="plain" style="width:${item.progress_percent}%"></i></div>` : "";
         return `<tr class="${view.pickedTitle === item.title ? "picked" : ""}">
-          <td class="cat hide-small">${esc((item.catalog_numbers || [])[0] || "")}</td>
-          <td class="name-cell"><strong class="ellipsis" title="${esc(item.title)}">${esc(item.title)}</strong><small class="ellipsis">${esc(item.artist)}</small></td>
-          <td class="n hide-small">${esc(item.year || "")}</td>
-          <td class="word hide-small">${esc(item.kind)}</td>
-          <td class="n hide-small">${item.track_count || ""}</td>
-          <td><span class="word ${look}">${esc(WORDS[item.state])}</span>${item.uploader ? ` <span class="who">${esc(item.uploader)}</span>` : ""}<span class="note ellipsis" title="${esc(detail)}">${esc(detail)}</span></td>
+          <td class="mono hide-sm muted">${esc((item.catalog_numbers || [])[0] || "")}</td>
+          <td class="name"><strong class="ellipsis" title="${esc(item.title)}">${esc(item.title)}</strong><small class="ellipsis">${esc(item.artist)}${item.year ? ` · ${item.year}` : ""}${item.kind ? ` · ${esc(item.kind)}` : ""}${item.track_count ? ` · ${plural(item.track_count, "track")}` : ""}</small></td>
+          <td><span class="word ${esc(item.state)}">${esc(WORDS[item.state])}</span>${item.uploader ? ` <span class="muted" style="font-size:12px">· ${esc(item.uploader)}</span>` : ""}<span class="note ellipsis" title="${esc(detail)}">${esc(detail)}</span>${progress}</td>
           <td class="n">${releaseActions(job, item)}</td>
         </tr>`;
       }).join("");
-      const html = `<div class="switch" role="group" aria-label="Filter releases">${tabs}</div>
-        <table class="sheet"><thead><tr><th class="hide-small">Cat. no.</th><th>Release</th><th class="n hide-small">Year</th><th class="hide-small">Kind</th>
-        <th class="n hide-small">Tracks</th><th>Status</th><th></th></tr></thead><tbody>${body || `<tr><td colspan="7" class="quiet">Nothing here.</td></tr>`}</tbody></table>`;
+      const html = `<div class="chips" role="group" aria-label="Filter releases">${tabs}</div>
+        <table><thead><tr><th class="hide-sm">Cat. no.</th><th>Release</th><th>Status</th><th></th></tr></thead>
+        <tbody>${body || `<tr><td colspan="4" class="muted">Nothing here.</td></tr>`}</tbody></table>`;
       if (box.dataset.painted !== html) { box.innerHTML = html; box.dataset.painted = html; }
     });
   }
@@ -501,10 +753,11 @@
     } catch (error) {
       view.openJob = null;
       view.jobData = null;
+      renderOpenCrate();
     }
   }
 
-  // Transfers, by album //
+  // Transfers, grouped by album folder //
 
   function folderOf(download) {
     return download.virtual_path.slice(0, download.virtual_path.length - download.basename.length - 1);
@@ -516,7 +769,7 @@
       const folder = folderOf(download);
       const key = `${download.username}\n${folder}`;
       if (!hauls.has(key)) {
-        hauls.set(key, {key, username: download.username, folder, name: folder.split("\\").pop() || folder, files: [], bytes: 0, size: 0, speed: 0, counts: {}, position: 0});
+        hauls.set(key, {key, username: download.username, folder, name: folder.split("\\").pop() || folder, files: [], bytes: 0, size: 0, speed: 0, counts: {}, position: 0, left: 0});
       }
       const haul = hauls.get(key);
       haul.files.push(download);
@@ -524,184 +777,179 @@
       haul.size += download.size_bytes;
       haul.speed += download.state === "active" ? download.speed_bytes : 0;
       haul.counts[download.state] = (haul.counts[download.state] || 0) + 1;
-      if (download.state === "queued" && download.queue_position) haul.position = download.queue_position;
+      if (download.state === "queued" && download.queue_position) haul.position = Math.max(haul.position, download.queue_position);
+      if (download.state === "active" && download.time_left_seconds) haul.left = Math.max(haul.left, download.time_left_seconds);
     }
     const order = (haul) => (haul.counts.active ? 0 : haul.counts.queued ? 1 : haul.counts.paused ? 2 : haul.counts.failed ? 3 : 4);
-    return [...hauls.values()].sort((a, b) => order(a) - order(b));
+    return [...hauls.values()].sort((a, b) => order(a) - order(b) || b.speed - a.speed);
   }
 
-  function haulButton(name, label, haul, kind = "") {
-    return `<button class="act ${kind}" type="button" data-haul-do="${name}" data-haul="${esc(haul.key)}">${label}</button>`;
-  }
-
-  function fileButton(name, label, file, kind = "") {
-    return `<button class="act ${kind}" type="button" data-file-do="${name}" data-user="${esc(file.username)}" data-path="${esc(file.virtual_path)}">${label}</button>`;
+  function haulRate(haul) {
+    if (haul.speed) return ["moving", `${showRate(haul.speed)}<small>${haul.left ? `${showTime(haul.left)} left` : ""}</small>`];
+    const isDone = (haul.counts.finished || 0) === haul.files.length;
+    if (isDone) return ["", `<span class="word finished">done</span>`];
+    if (haul.counts.failed && !haul.counts.queued && !haul.counts.active) return ["bad", `failed<small>${haul.files.some((f) => f.will_retry) ? "retries soon" : ""}</small>`];
+    if (haul.counts.active) return ["moving", "starting…"];
+    if (haul.position) return ["", `queued<small>#${haul.position} in line</small>`];
+    if (haul.counts.queued) return ["", "queued<small>asking uploader</small>"];
+    if (haul.counts.paused) return ["", "paused"];
+    return ["", ""];
   }
 
   function renderHauls(downloads) {
     const counts = {all: downloads.length};
     for (const download of downloads) counts[download.state] = (counts[download.state] || 0) + 1;
+    $("transfers-count").textContent = downloads.length;
     paint($("filters"), FILTERS.filter((name) => name === "all" || counts[name]).map((name) => (
       `<button type="button" data-filter="${name}" aria-pressed="${name === view.filter}">${name}<b>${counts[name] || 0}</b></button>`
     )).join(""));
+    paint($("transfer-actions"),
+      (counts.failed ? `<button class="btn sm" type="button" data-do="retry-failed">Retry failed</button>` : "") +
+      (counts.finished ? `<button class="btn sm ghost" type="button" data-do="clear-finished">Clear finished</button>` : ""));
 
     const shown = downloads.filter((download) => view.filter === "all" || download.state === view.filter);
     if (!shown.length) {
-      paint($("hauls"), `<div class="empty">Nothing on the way${view.filter === "all" ? "." : ` that is ${esc(view.filter)}.`}</div>`);
+      paint($("hauls"), `<div class="empty"><strong>${view.filter === "all" ? "Nothing on the way" : `No ${esc(view.filter)} transfers`}</strong>${view.filter === "all" ? "Ask your agent for a track, an album, a label or an artist." : ""}</div>`);
       return;
     }
-
     paint($("hauls"), buildHauls(shown).map((haul) => {
       const numFinished = haul.counts.finished || 0;
       const isDone = numFinished === haul.files.length;
       const percent = haul.size ? Math.min(100, haul.bytes / haul.size * 100) : (isDone ? 100 : 0);
       const isOpen = view.openHauls.has(haul.key);
-      let rate = "";
-      if (haul.speed) rate = showRate(haul.speed);
-      else if (haul.counts.failed && !haul.counts.queued && !haul.counts.active) rate = "failed";
-      else if (haul.position) rate = `#${haul.position}`;
-      else if (haul.counts.queued) rate = "queued";
-      else if (haul.counts.paused) rate = "paused";
+      const [rateClass, rate] = haulRate(haul);
+      const barClass = isDone ? "plain done" : haul.counts.paused && !haul.counts.active && !haul.counts.queued ? "plain paused" : "plain";
       const buttons = [];
       if (haul.counts.active || haul.counts.queued) buttons.push(haulButton("pause", "Pause", haul));
       if (haul.counts.paused || haul.counts.failed) buttons.push(haulButton("retry", "Retry", haul));
-      buttons.push(haulButton("remove", "Remove", haul, "stop"));
-
-      const files = !isOpen ? "" : `<table class="sheet"><thead><tr><th>File</th><th>Status</th><th class="n">Size</th><th class="n">Progress</th><th class="n">Rate</th><th></th></tr></thead><tbody>` +
+      buttons.push(haulButton("remove", "Remove", haul, "danger"));
+      const files = !isOpen ? "" : `<div class="haul-files"><table><thead><tr><th>File</th><th>Status</th><th class="n">Size</th><th class="n">Progress</th><th class="n">Rate</th><th></th></tr></thead><tbody>` +
         haul.files.map((file) => {
           const left = file.state === "active" && file.time_left_seconds ? showTime(file.time_left_seconds) : (file.queue_position ? `#${file.queue_position}` : "");
           const actions = [];
           if (file.state === "active" || file.state === "queued") actions.push(fileButton("pause", "Pause", file));
           if (file.state === "paused" || file.state === "failed") actions.push(fileButton("retry", "Retry", file));
-          actions.push(fileButton("remove", "Remove", file, "stop"));
-          return `<tr><td class="name-cell"><span class="ellipsis" style="display:block" title="${esc(file.local_path || file.basename)}">${esc(file.basename)}</span></td>
-            <td><span class="word ${esc(file.state)}">${esc(file.status)}${file.will_retry ? " (will retry)" : ""}</span></td>
+          actions.push(fileButton("remove", "Remove", file, "danger"));
+          return `<tr><td class="name"><span class="ellipsis" style="display:block" title="${esc(file.local_path || file.basename)}">${esc(file.basename)}</span></td>
+            <td><span class="word ${esc(file.state)}">${esc(file.status)}${file.will_retry ? " · will retry" : ""}</span></td>
             <td class="n">${esc(file.size)}</td><td class="n">${file.progress_percent.toFixed(0)}%</td>
-            <td class="n">${esc(file.speed || left)}</td><td class="n">${actions.join(" ")}</td></tr>`;
-        }).join("") + "</tbody></table>";
-
+            <td class="n">${file.state === "active" ? esc(file.speed || left) : esc(left)}</td><td class="n"><div class="actions" style="justify-content:flex-end">${actions.join("")}</div></td></tr>`;
+        }).join("") + "</tbody></table></div>";
       return `<div class="haul">
         <div class="haul-row" data-haul-open="${esc(haul.key)}" aria-expanded="${isOpen}">
-          <div style="min-width:0"><strong class="ellipsis" title="${esc(haul.folder)}">${esc(haul.name)}</strong><small class="ellipsis">${showSize(haul.bytes)} of ${showSize(haul.size)}</small></div>
-          <div class="haul-who ellipsis" title="${esc(haul.username)}">${esc(haul.username)}</div>
-          <div class="haul-count">${numFinished}/${haul.files.length} files</div>
-          <div class="haul-rate ${haul.speed ? "moving" : ""}">${esc(rate)}</div>
-          <div class="haul-actions">${buttons.join("")}</div>
-          <div class="level ${isDone ? "done" : ""}"><div style="width:${percent.toFixed(1)}%"></div></div>
+          <div style="min-width:0"><strong class="ellipsis" title="${esc(haul.folder)}"><span class="chev">▶</span>${esc(haul.name)}</strong>
+            <small>${numFinished}/${haul.files.length} files · ${showSize(haul.bytes)} of ${showSize(haul.size)}</small>
+            <div class="bar thin"><i class="${barClass}" style="width:${percent.toFixed(1)}%"></i></div></div>
+          <div class="haul-who ellipsis" title="from ${esc(haul.username)}">${esc(haul.username)}</div>
+          <div class="haul-count num muted" style="font-size:12.5px">${percent.toFixed(0)}%</div>
+          <div class="haul-rate ${rateClass}">${rate}</div>
+          <div class="actions" style="justify-content:flex-end">${buttons.join("")}</div>
         </div>${files}
       </div>`;
     }).join(""));
+  }
+
+  function haulButton(name, label, haul, kind = "") {
+    return `<button class="btn sm ghost ${kind}" type="button" data-haul-do="${name}" data-haul="${esc(haul.key)}">${label}</button>`;
+  }
+  function fileButton(name, label, file, kind = "") {
+    return `<button class="btn sm ghost ${kind}" type="button" data-file-do="${name}" data-user="${esc(file.username)}" data-path="${esc(file.virtual_path)}">${label}</button>`;
   }
 
   // Rail //
 
   function renderBoard(data) {
     const fastest = data.fastest_uploaders || [];
+    $("measured").textContent = data.num_uploaders_measured ? `${data.num_uploaders_measured} measured` : "";
     if (!fastest.length) {
-      paint($("board"), `<div class="empty" style="padding:4px 0">No measurements yet. Speeds appear once something is transferring.</div>`);
+      paint($("board"), `<div class="muted" style="font-size:12.5px">No measurements yet. Real speeds appear once something has transferred.</div>`);
       return;
     }
     const low = 50e3;
     const high = Math.max(fastest[0].speed_bytes, 5e6);
     const reach = (speed) => Math.max(2, Math.log(Math.max(speed, low) / low) / Math.log(high / low) * 100);
-    paint($("board"), `<div class="board">` + fastest.map((item) => (
-      `<div style="--reach:${reach(item.speed_bytes).toFixed(0)}%"><span class="ellipsis" title="${esc(item.username)}">${esc(item.username)}</span><span class="rate">${esc(showRate(item.speed_bytes))}</span><i></i></div>`
-    )).join("") + `</div><p class="board-note">Real speeds, from ${data.num_uploaders_measured} measured. What uploaders claim isn't used.</p>`);
+    paint($("board"), `<div class="uploaders">` + fastest.map((item) => (
+      `<div><span class="ellipsis" title="${esc(item.username)}">${esc(item.username)}</span><span class="num muted">${esc(showRate(item.speed_bytes))}</span><div class="bar"><i style="width:${reach(item.speed_bytes).toFixed(0)}%"></i></div></div>`
+    )).join("") + `</div><div class="muted" style="font-size:11.5px;margin-top:10px">Measured on real transfers. What uploaders claim is not used.</div>`);
   }
 
   function renderQueries(searches) {
+    $("searches-count").textContent = searches.length;
     if (!searches.length) {
-      paint($("queries"), `<div class="empty" style="padding:4px 0">No searches yet.</div>`);
+      paint($("queries"), `<div class="muted" style="font-size:12.5px">The agent's searches show up here. Click one to see the ranked results.</div>`);
       return;
     }
-    paint($("queries"), searches.slice(0, 12).map((search) => (
+    paint($("queries"), searches.slice(0, 15).map((search) => (
       `<button type="button" data-search="${search.token}" class="${search.token === view.search ? "picked" : ""}">` +
-      `<span class="ellipsis ${search.is_active ? "live" : ""}" title="${esc(search.query)}">${esc(search.query)}</span><b>${search.num_files}</b></button>`
+      `<span class="ellipsis" title="${esc(search.query)}">${esc(search.query)}<small>${search.is_active ? "live · " : ""}${search.num_users_responded} users${search.username ? ` · ${esc(search.username)}` : ""}</small></span>` +
+      `<span class="n">${search.num_files} files</span></button>`
     )).join(""));
   }
 
   async function renderDrawer() {
     const drawer = $("drawer");
+    $("scrim").hidden = view.search === null;
     if (view.search === null) { drawer.hidden = true; return; }
     drawer.hidden = false;
     let data;
     try {
       data = await api(`/api/search/${view.search}?group=${view.group}&limit=25`);
     } catch (error) {
-      drawer.innerHTML = `<div class="drawer-head"><h2>Search</h2><span class="spacer"></span><button class="act" type="button" data-do="close-drawer">Close</button></div><p class="quiet">${esc(error.message)}</p>`;
+      drawer.innerHTML = `<div class="drawer-head"><h2>Search</h2><span class="spacer"></span><button class="btn sm" type="button" data-do="close-drawer">Close</button></div><p class="muted">${esc(error.message)}</p>`;
       return;
     }
     const isAlbum = view.group === "album";
     const items = isAlbum ? data.albums : data.tracks;
-    const stop = data.search.is_active ? `<button class="act" type="button" data-do="stop-search">Stop</button>` : "";
+    const stop = data.search.is_active ? `<button class="btn sm" type="button" data-do="stop-search">Stop collecting results</button>` : "";
     const rows = items.map((item) => `<tr>
-      <td class="n">${item.score}</td>
-      <td class="name-cell"><strong class="ellipsis" title="${esc(item.virtual_path || item.folder_path)}">${esc(isAlbum ? item.folder_name : item.basename)}</strong>
-        <small class="ellipsis" title="${esc(item.folder_path)}">${esc(isAlbum ? `${item.num_audio_files} audio files` : item.folder_path)}</small></td>
-      <td class="who">${esc(item.username)}</td>
-      <td class="word">${esc(isAlbum ? item.formats.join(" ") : item.quality)}</td>
+      <td class="n"><span class="badge">${item.score}</span></td>
+      <td class="name"><strong class="ellipsis" title="${esc(item.virtual_path || item.folder_path)}">${esc(isAlbum ? item.folder_name : item.basename)}</strong>
+        <small class="ellipsis" title="${esc(item.folder_path)}">${esc(isAlbum ? `${item.num_audio_files} audio files · ${item.formats.join(", ")}` : item.folder_path)}</small></td>
+      <td>${esc(item.username)}${item.country_code ? ` <span class="muted">${esc(item.country_code)}</span>` : ""}</td>
+      <td class="word">${esc(isAlbum ? "" : item.quality)}</td>
       <td class="n">${esc(item.total_size || item.size)}</td>
-      <td class="word">${item.has_free_slot ? "free slot" : `${item.queue_length} queued`}</td>
-      <td class="n">${item.measured_speed ? esc(item.measured_speed) : `<span class="quiet">unmeasured</span>`}</td></tr>`).join("");
+      <td>${item.has_free_slot ? `<span class="badge ok">free slot</span>` : `<span class="badge warn">${item.queue_length} queued</span>`}</td>
+      <td class="n">${item.measured_speed ? esc(item.measured_speed) : `<span class="faint">${item.upload_speed ? `claims ${esc(item.upload_speed)}` : "—"}</span>`}</td></tr>`).join("");
     drawer.innerHTML = `<div class="drawer-head"><h2>${esc(data.search.query)}</h2>
-        <span class="crate-state">${data.search.num_users_responded} users · ${data.search.num_files} files</span>
-        <div class="switch"><button type="button" data-group="album" aria-pressed="${isAlbum}">Albums</button><button type="button" data-group="track" aria-pressed="${!isAlbum}">Tracks</button></div>
-        <span class="spacer"></span>${stop}<button class="act" type="button" data-do="close-drawer">Close</button></div>` +
-      (rows ? `<table class="sheet"><thead><tr><th class="n">Score</th><th>${isAlbum ? "Folder" : "File"}</th><th>Uploader</th><th>Quality</th><th class="n">Size</th><th>Slot</th><th class="n">Real speed</th></tr></thead><tbody>${rows}</tbody></table>`
-            : `<p class="quiet">No matching results.</p>`);
+        <span class="muted">${data.search.num_users_responded} users · ${data.search.num_files} files${data.search.is_active ? " · still collecting" : ""}</span>
+        <div class="chips"><button type="button" data-group="album" aria-pressed="${isAlbum}">Albums</button><button type="button" data-group="track" aria-pressed="${!isAlbum}">Tracks</button></div>
+        <span class="spacer"></span>${stop}<button class="btn sm" type="button" data-do="close-drawer">Close</button></div>` +
+      (rows ? `<table><thead><tr><th class="n">Score</th><th>${isAlbum ? "Folder" : "File"}</th><th>Uploader</th><th>${isAlbum ? "" : "Quality"}</th><th class="n">Size</th><th>Slot</th><th class="n">Real speed</th></tr></thead><tbody>${rows}</tbody></table>`
+            : `<p class="muted">No matching results yet.</p>`);
   }
 
-  // Spine hover card //
-
-  function showCard(spine) {
-    const shelf = view.shelves[spine.dataset.jobOpen];
-    const item = shelf && shelf[Number(spine.dataset.spine)];
-    if (!item) return;
-    const card = $("card");
-    const facts = [item.catalog_number, item.year, item.kind, item.track_count ? `${item.track_count} tracks` : ""].filter(Boolean).join(" · ");
-    const status = item.is_queued ? "in queue" : item.state === "downloading" ? `${WORDS[item.state]} ${item.progress_percent}%` : WORDS[item.state];
-    card.innerHTML = `<strong>${esc(item.title)}</strong><span>${esc(item.artist)}</span><small>${esc(facts)}</small>` +
-      `<small>${esc(status)}${item.uploader ? ` · ${esc(item.uploader)}` : ""}</small>`;
-    card.hidden = false;
-    const box = spine.getBoundingClientRect();
-    const rect = card.getBoundingClientRect();
-    card.style.left = `${Math.max(8, Math.min(window.innerWidth - rect.width - 8, box.left + box.width / 2 - rect.width / 2))}px`;
-    card.style.top = `${box.top - rect.height - 8 > 70 ? box.top - rect.height - 8 : box.bottom + 8}px`;
+  function renderLog(lines) {
+    const log = $("logbox");
+    const isAtEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+    const html = lines.map((line) => {
+      const cls = /finished|started/i.test(line) && /download/i.test(line) ? "lg-dl" : /cannot|fail|error|denied|rejected|elsewhere/i.test(line) ? "lg-bad" : "";
+      return `<span class="${cls}">${esc(line)}</span>`;
+    }).join("\n");
+    if (paint(log, html) && isAtEnd) log.scrollTop = log.scrollHeight;
   }
-
-  document.addEventListener("mouseover", (event) => {
-    const spine = event.target.closest && event.target.closest(".spine");
-    if (spine) showCard(spine); else $("card").hidden = true;
-  });
-  document.addEventListener("focusin", (event) => {
-    if (event.target.classList.contains("spine")) showCard(event.target); else $("card").hidden = true;
-  });
-
-  // The rest //
 
   function render(data) {
     view.data = data;
-    renderDeck(data);
-    renderCrates(data.jobs || []);
+    if (data.server_time) view.skew = Date.now() / 1000 - data.server_time;
+    renderTop(data);
+    renderOverview(data);
     renderHauls(data.downloads);
+    renderCrates(data.jobs || []);
     renderBoard(data);
     renderQueries(data.searches);
-    const log = $("log");
-    const isAtEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
-    log.textContent = (data.recent_log || []).join("\n");
-    if (isAtEnd) log.scrollTop = log.scrollHeight;
+    renderLog(data.recent_log || []);
+    paint($("foot"), `<span>nicotine-mcp · Nicotine+ ${esc(data.status.version)}</span><span class="ellipsis" title="${esc(data.status.download_folder)}">downloads: ${esc(data.status.download_folder)}</span>`);
   }
 
   async function refresh() {
     if (view.held) return;
-    const updated = $("updated");
     try {
       render(await api("/api/state"));
-      updated.textContent = "live";
-      updated.classList.remove("bad");
+      $("live").className = "live";
+      $("live").lastElementChild.textContent = "live";
     } catch (error) {
-      updated.textContent = `update failed: ${error.message}`;
-      updated.classList.add("bad");
+      $("live").className = "live bad";
+      $("live").lastElementChild.textContent = `update failed: ${error.message}`;
     }
   }
 
@@ -717,100 +965,111 @@
     }
   }
 
+  function closeMenus(except) {
+    document.querySelectorAll("details.menu[open]").forEach((menu) => { if (menu !== except) menu.open = false; });
+  }
+
   document.addEventListener("click", async (event) => {
+    const menu = event.target.closest("details.menu");
+    closeMenus(menu);
     const el = event.target.closest("button, [data-haul-open]");
     if (!el) return;
     const data = el.dataset;
     try {
       if (data.filter) { view.filter = data.filter; if (view.data) renderHauls(view.data.downloads); return; }
       if (data.group) { view.group = data.group; await renderDrawer(); return; }
-      if (data.jobFilter) { view.jobFilter = data.jobFilter; view.pickedTitle = null; renderOpenCrate(); return; }
-
-      if (data.exportState !== undefined) {
-        const result = await api("/api/export", {});
-        alert(`Saved to ${result.path}\n\n${result.num_jobs} jobs, ${result.num_transfers} downloads. No Soulseek login in it.\n\nThe other user runs:\nnicotine-mcp import "${result.path}"\n\n${result.warning}`);
+      if (data.jobFilter) {
+        if (view.openJob !== data.job) { view.openJob = data.job; view.jobData = null; view.pickedTitle = null; }
+        view.jobFilter = data.jobFilter;
+        if (view.data) renderCrates(view.data.jobs || []);
+        renderOpenCrate();
+        await loadOpenCrate();
         return;
       }
-
+      if (data.do === "export") {
+        const result = await api("/api/export", {});
+        toast(`Saved ${result.num_jobs} jobs and ${result.num_transfers} downloads to ${result.path}. The other user runs: nicotine-mcp import "${result.path}"`, "ok");
+        if (result.warning) toast(result.warning, "bad");
+        return;
+      }
       if (data.jobDo) {
         if (data.jobDo === "cancel" && !confirm("Cancel this job and remove its unfinished downloads? Finished files stay.")) return;
         if (data.jobDo === "remove" && !confirm("Remove this from the list? Its files stay on disk.")) return;
-        if (data.jobDo === "remove" && view.openJob === data.job) { view.openJob = null; view.jobData = null; }
         if (data.jobDo === "skip-release" && !confirm("Skip this release? Its unfinished downloads are removed.")) return;
+        if (data.jobDo === "remove" && view.openJob === data.job) { view.openJob = null; view.jobData = null; }
         await api(`/api/jobs/${data.jobDo}`, {job_id: data.job, flac_only: data.flac === "1", now: data.now === "1", release_id: data.release});
         await refresh();
         await loadOpenCrate();
         return;
       }
-
-      if (data.jobOpen) {
-        const spineItem = data.spine !== undefined ? (view.shelves[data.jobOpen] || [])[Number(data.spine)] : null;
-        if (spineItem) {
-          view.pickedTitle = spineItem.title;
-          view.openJob = data.jobOpen;
-        } else {
-          view.pickedTitle = null;
-          view.openJob = view.openJob === data.jobOpen ? null : data.jobOpen;
-        }
+      if (data.jobOpen !== undefined) {
+        view.openJob = view.openJob === data.jobOpen ? null : data.jobOpen;
         view.jobFilter = "all";
         view.jobData = null;
+        view.pickedTitle = null;
         if (view.data) renderCrates(view.data.jobs || []);
         renderOpenCrate();
         await loadOpenCrate();
-        if (spineItem) document.querySelector(".crate-sheet tr.picked")?.scrollIntoView({block: "center", behavior: "smooth"});
+        if (view.openJob) document.getElementById(`job-${view.openJob}`)?.scrollIntoView({block: "start", behavior: "smooth"});
         return;
       }
-
       if (data.fileDo) {
         const file = view.data.downloads.find((item) => item.username === data.user && item.virtual_path === data.path);
         if (file) await actOnFiles([file], data.fileDo);
         await refresh();
         return;
       }
-
       if (data.haulDo) {
         const haul = buildHauls(view.data.downloads).find((item) => item.key === data.haul);
         if (!haul) return;
-        if (data.haulDo === "remove" && !confirm(`Remove ${haul.files.length} downloads from the list?`)) return;
+        if (data.haulDo === "remove" && !confirm(`Remove ${plural(haul.files.length, "download")} from the list? Finished files stay on disk.`)) return;
         await actOnFiles(haul.files, data.haulDo);
         await refresh();
         return;
       }
-
       if (data.haulOpen !== undefined) {
         if (view.openHauls.has(data.haulOpen)) view.openHauls.delete(data.haulOpen); else view.openHauls.add(data.haulOpen);
         renderHauls(view.data.downloads);
         return;
       }
-
       if (data.search) { view.search = Number(data.search); view.group = "album"; await renderDrawer(); renderQueries(view.data.searches); return; }
       if (data.do === "close-drawer") { view.search = null; await renderDrawer(); renderQueries(view.data.searches); return; }
-      if (data.do === "clear-finished") { await api("/api/downloads/clear-finished", {}); await refresh(); return; }
-      if (data.do === "pause-all" || data.do === "resume-all") {
-        await api(`/api/downloads/${data.do}`, {});
-        await refresh();
-        await loadOpenCrate();
-        return;
+      if (data.do === "stop-search") { await api("/api/searches/stop", {token: view.search}); await renderDrawer(); await refresh(); return; }
+      if (data.do === "clear-finished") { const r = await api("/api/downloads/clear-finished", {}); toast(`Cleared ${plural(r.num_removed, "finished download")}`); await refresh(); return; }
+      if (data.do === "retry-failed") { const r = await api("/api/downloads/retry-failed", {}); toast(`Retrying ${plural(r.num_retried, "download")}`); await refresh(); return; }
+      if (data.do === "pause-all") {
+        const r = await api("/api/downloads/pause-all", {});
+        toast(`Paused ${plural(r.num_paused, "transfer")} and ${plural(r.num_jobs_paused, "job")}`);
+        await refresh(); await loadOpenCrate(); return;
       }
-      if (data.do === "stop-search") { await api("/api/searches/stop", {token: view.search}); await renderDrawer(); await refresh(); }
+      if (data.do === "resume-all") {
+        const r = await api("/api/downloads/resume-all", {});
+        toast(`Resumed ${plural(r.num_resumed, "transfer")} and ${plural(r.num_jobs_resumed, "job")}`, "ok");
+        await refresh(); await loadOpenCrate(); return;
+      }
+      if (data.do === "copy-log") { await navigator.clipboard.writeText($("logbox").textContent); toast("Log copied"); return; }
     } catch (error) {
-      $("updated").textContent = `that didn't work: ${error.message}`;
-      $("updated").classList.add("bad");
+      toast(`That didn't work: ${error.message}`, "bad");
     }
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && view.search !== null) { view.search = null; renderDrawer(); }
+    if (event.key === "Escape") { closeMenus(); if (view.search !== null) { view.search = null; renderDrawer(); } }
   });
+  $("scrim").addEventListener("click", () => { view.search = null; renderDrawer(); });
 
   $("hold").addEventListener("click", () => {
     view.held = !view.held;
-    $("hold").textContent = view.held ? "Resume" : "Hold";
-    $("updated").textContent = view.held ? "held" : "live";
+    $("hold").textContent = view.held ? "Resume updates" : "Hold";
+    $("live").className = view.held ? "live held" : "live";
+    $("live").lastElementChild.textContent = view.held ? "held" : "live";
     if (!view.held) refresh();
   });
 
-  refresh();
+  if (location.hash.startsWith("#job-")) { view.openJob = decodeURIComponent(location.hash.slice(5)); }
+  refresh().then(loadOpenCrate).then(() => {
+    if (view.openJob) document.getElementById(`job-${view.openJob}`)?.scrollIntoView({block: "start"});
+  });
   setInterval(refresh, 2000);
   setInterval(() => { if (!view.held) loadOpenCrate(); }, 5000);
   setInterval(() => { if (view.search !== null && !view.held) renderDrawer(); }, 10000);

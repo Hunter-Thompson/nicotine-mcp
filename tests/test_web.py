@@ -208,6 +208,10 @@ class DashboardTest(TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(payload), {"num_removed": 0})
 
+        status, _content_type, payload = self.post("/api/downloads/retry-failed", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"num_retried": 0})
+
         # Pause all and resume all, without a job manager
         self.automation.download_file("user", "Music\\c.flac", size=1000)
 

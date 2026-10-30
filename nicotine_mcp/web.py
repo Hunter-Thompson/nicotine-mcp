@@ -249,6 +249,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if action == "clear-finished":
             return self._call(automation.clear_finished_downloads)
 
+        if action == "retry-failed":
+            return self._call(automation.retry_failed_downloads)
+
         if action == "pause-all":
             # Jobs first, so none of them starts another album while the downloads are being paused
             jobs_paused = jobs.pause_all(PauseMode.NOW) if jobs is not None else []

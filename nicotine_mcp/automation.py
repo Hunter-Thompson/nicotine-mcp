@@ -14,6 +14,7 @@ and reused without it.
 from __future__ import annotations
 
 import os
+import shutil
 import time
 
 from dataclasses import replace
@@ -836,6 +837,8 @@ class Automation:
 
         return {
             "status": self.get_status(),
+            "disk": self.get_disk_usage(),
+            "server_time": time.time(),
             "download_speed_bytes": total_speed,
             "download_speed": human_speed(total_speed) if total_speed else None,
             "fastest_uploaders": [
@@ -845,6 +848,47 @@ class Automation:
             "downloads": downloads,
             "searches": [self.get_search_summary(token) for token in reversed(list(self.searches))]
         }
+
+    @staticmethod
+    def get_disk_usage():
+        """Free and total space of the drive holding the download folder, or None when
+        the folder (e.g. an external drive) is not there."""
+
+        download_folder = core.downloads.get_default_download_folder()
+        path = download_folder
+
+        while path and not os.path.isdir(path):
+            parent = os.path.dirname(path)
+
+            if parent == path:
+                return None
+
+            path = parent
+
+        try:
+            usage = shutil.disk_usage(path)
+
+        except OSError:
+            return None
+
+        return {
+            "path": download_folder,
+            "is_available": os.path.isdir(download_folder),
+            "free_bytes": usage.free,
+            "total_bytes": usage.total,
+            "free": human_size(usage.free),
+            "total": human_size(usage.total)
+        }
+
+    def retry_failed_downloads(self):
+        """Retries every failed download."""
+
+        transfers = self.select_downloads(states={DownloadState.FAILED})
+
+        for transfer in transfers:
+            core.downloads.retry_download(transfer)
+
+        return {"num_retried": len(transfers)}
 
     def clear_finished_downloads(self):
         """Removes finished downloads from the list. Files stay on disk."""

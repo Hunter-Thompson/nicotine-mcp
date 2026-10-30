@@ -165,8 +165,21 @@ class FakeAutomation:
     def get_downloads(self, _state, username, folder_path, _limit):
         return {"downloads": list(self.downloads.get((username, folder_path), []))}
 
-    def cancel_folder_downloads(self, username, folder_path, _remove):
-        self.downloads.pop((username, folder_path), None)
+    def cancel_folder_downloads(self, username, folder_path, remove=True):
+
+        if remove:
+            self.downloads.pop((username, folder_path), None)
+            return
+
+        for download in self.downloads.get((username, folder_path), []):
+            if download["state"] != "finished":
+                download["state"] = "paused"
+
+    def retry_download(self, username, virtual_path):
+
+        for download in self.downloads[username, virtual_path.rpartition("\\")[0]]:
+            if download["virtual_path"] == virtual_path:
+                download["state"] = "active"
 
     def set_transfer_state(self, username, folder_path, state, bytes_transferred=None, will_retry=False):
 
@@ -920,6 +933,128 @@ class ControlTest(JobTestCase):
         self.manager.resume_job(job_id)
         self.steps(1)
         self.assertEqual(len(self.automation.queries), 1)
+
+    def test_pause_after_album_finishes_what_has_started(self):
+
+        job_id = self.create([self.share_release(1), self.share_release(2, "bob")], max_active_releases=1)
+        self.steps(3)
+        self.assertEqual(self.item_states(job_id)[0], ItemState.DOWNLOADING)
+
+        self.automation.set_transfer_state("alice", "Music\\Barker\\Album 1", "active", bytes_transferred=10)
+        self.steps(1)
+        self.manager.pause_job(job_id)
+        self.steps(2)
+        self.assertEqual(self.automation.downloads["alice", "Music\\Barker\\Album 1"][0]["state"], "active")
+
+        self.automation.set_transfer_state("alice", "Music\\Barker\\Album 1", "finished", bytes_transferred=1000)
+        self.steps(3)
+
+        self.assertEqual(self.item_states(job_id)[0], ItemState.FINISHED)
+        self.assertNotEqual(self.item_states(job_id)[1], ItemState.DOWNLOADING)
+
+    def test_pause_after_album_leaves_queues_and_resuming_lines_up_again(self):
+
+        self.automation.never_active.add("alice")
+        job_id = self.create([self.share_release(1)])
+        self.steps(2)
+        item = self.manager.jobs[job_id].items[0]
+        folder = "Music\\Barker\\Album 1"
+        self.automation.set_transfer_state("alice", folder, "queued", bytes_transferred=0)
+        self.assertTrue(item.is_queued)
+
+        self.manager.pause_job(job_id)
+        self.steps(1)
+
+        self.assertEqual(item.state, ItemState.SOURCED)
+        self.assertFalse(item.is_queued)
+        self.assertEqual(self.automation.downloads["alice", folder], [])
+
+        self.manager.resume_job(job_id)
+        self.steps(1)
+
+        self.assertEqual(item.state, ItemState.DOWNLOADING)
+        self.assertTrue(item.is_queued)
+
+    def test_pause_now_stops_transfers_and_resuming_continues_them(self):
+
+        job_id = self.create([self.share_release(1)], start_timeout=900)
+        self.steps(2)
+        item = self.manager.jobs[job_id].items[0]
+        folder = "Music\\Barker\\Album 1"
+        self.automation.set_transfer_state("alice", folder, "active", bytes_transferred=100)
+        self.steps(1)
+
+        self.manager.pause_job(job_id, "now")
+        self.steps(1)
+
+        self.assertEqual({download["state"] for download in self.automation.downloads["alice", folder]}, {"paused"})
+        self.assertEqual(item.state, ItemState.DOWNLOADING)
+
+        # Having been paused for long doesn't make the uploader unreliable
+        self.now += 5000
+        self.steps(1)
+        self.manager.resume_job(job_id)
+        self.steps(1)
+
+        self.assertEqual({download["state"] for download in self.automation.downloads["alice", folder]}, {"active"})
+        self.assertEqual(item.current_source["username"], "alice")
+        self.assertFalse(self.manager.jobs[job_id].transfers_paused)
+
+    def test_unknown_way_to_pause_is_refused(self):
+
+        job_id = self.create([self.share_release(1)])
+
+        with self.assertRaises(ValueError):
+            self.manager.pause_job(job_id, "soon")
+
+    def test_skip_removes_unfinished_downloads(self):
+
+        release = self.share_release(1)
+        job_id = self.create([release])
+        self.steps(2)
+
+        anyio.run(self.manager.skip_release, job_id, release.release_id)
+        item = self.manager.jobs[job_id].items[0]
+
+        self.assertEqual(item.state, ItemState.CANCELLED)
+        self.assertEqual(item.note, "skipped")
+        self.assertEqual(self.automation.downloads["alice", "Music\\Barker\\Album 1"], [])
+
+    def test_finished_release_cannot_be_skipped(self):
+
+        release = self.share_release(1)
+        job_id = self.create([release])
+        self.steps(2)
+        self.automation.set_transfer_state("alice", "Music\\Barker\\Album 1", "finished", bytes_transferred=1000)
+        self.steps(1)
+
+        with self.assertRaises(ValueError):
+            anyio.run(self.manager.skip_release, job_id, release.release_id)
+
+    def test_prioritize_moves_a_release_to_the_front(self):
+
+        first = self.share_release(1)
+        second = self.share_release(2, "bob")
+        job_id = self.create([first, second])
+
+        self.manager.prioritize_release(job_id, second.release_id)
+        self.steps(1)
+        items = self.manager.jobs[job_id].items
+
+        self.assertEqual(items[0].release["release_id"], second.release_id)
+        self.assertEqual(items[0].state, ItemState.SOURCED)
+        self.assertEqual(items[1].state, ItemState.PENDING)
+
+    def test_prioritize_brings_back_what_was_skipped(self):
+
+        release = self.share_release(1)
+        job_id = self.create([release])
+        anyio.run(self.manager.skip_release, job_id, release.release_id)
+
+        self.manager.prioritize_release(job_id, release.release_id)
+        self.steps(1)
+
+        self.assertEqual(self.item_states(job_id), [ItemState.SOURCED])
 
     def test_paused_job_keeps_tracking_transfers(self):
 

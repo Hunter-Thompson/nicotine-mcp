@@ -37,6 +37,7 @@ from nicotine_mcp.job_models import ItemState
 from nicotine_mcp.job_models import Job
 from nicotine_mcp.job_models import JobItem
 from nicotine_mcp.job_models import JobStatus
+from nicotine_mcp.job_models import PauseMode
 from nicotine_mcp.job_models import clean_folder_name
 from nicotine_mcp.job_models import describe_item
 from nicotine_mcp.job_models import describe_spine
@@ -124,6 +125,13 @@ class JobManager:
 
     def _mark_dirty(self):
         self._is_dirty = True
+
+    def flush(self):
+        """Saves right now, for those who are about to read the file."""
+
+        with self._lock:
+            self._mark_dirty()
+            self._save()
 
     # Thread #
 
@@ -232,8 +240,12 @@ class JobManager:
 
         return job
 
-    def pause_job(self, job_id):
-        """Stops searching and starting downloads. Transfers already started keep going."""
+    def pause_job(self, job_id, mode=PauseMode.AFTER_ALBUM):
+        """Stops searching and starting downloads. Albums that have started finish, unless
+        ``mode`` says to stop them now. Those only waiting in a queue go back in line on resuming."""
+
+        if mode not in PauseMode.ALL:
+            raise ValueError(f"Unknown way to pause '{mode}', expected one of {', '.join(PauseMode.ALL)}")
 
         with self._lock:
             job = self._get_job(job_id)
@@ -242,6 +254,7 @@ class JobManager:
                 raise ValueError(f"Job {job_id} is already {job.status}")
 
             job.status = JobStatus.PAUSED
+            job.pause_mode = mode
             self._mark_dirty()
 
         self._save()
@@ -256,7 +269,72 @@ class JobManager:
                 raise ValueError(f"Job {job_id} was cancelled")
 
             job.status = JobStatus.RUNNING
+            job.pause_mode = None
             job.finished_at = None
+            self._mark_dirty()
+
+        self._save()
+        return self.describe_job(job_id)
+
+    def _get_item(self, job, release_id):
+
+        for item in job.items:
+            if item.release.get("release_id") == release_id:
+                return item
+
+        raise KeyError(f"Job {job.job_id} has no release '{release_id}'")
+
+    async def skip_release(self, job_id, release_id):
+        """Leaves a release out of a job, and removes its unfinished downloads. Finished files stay on disk."""
+
+        with self._lock:
+            job = self._get_job(job_id)
+            item = self._get_item(job, release_id)
+
+            if item.state in {ItemState.FINISHED, ItemState.OWNED}:
+                raise ValueError(f"'{item.release.get('title')}' is already there")
+
+            source = item.current_source if item.state == ItemState.DOWNLOADING else None
+            item.state = ItemState.CANCELLED
+            item.is_queued = False
+            item.current_source = None
+            item.note = "skipped"
+            self._mark_dirty()
+
+        if source is not None:
+            await self._cancel_unfinished(source["username"], source["folder_path"])
+
+        self._save()
+        return self.describe_job(job_id)
+
+    def prioritize_release(self, job_id, release_id):
+        """Makes a release the next one to be worked on. That also brings back one that
+        was skipped or not found, which is then searched for again."""
+
+        with self._lock:
+            job = self._get_job(job_id)
+            item = self._get_item(job, release_id)
+
+            if job.status == JobStatus.CANCELLED:
+                raise ValueError(f"Job {job_id} was cancelled")
+
+            if item.state in {ItemState.FINISHED, ItemState.OWNED, ItemState.DOWNLOADING}:
+                raise ValueError(f"'{item.release.get('title')}' is already {item.state}")
+
+            if item.state not in {ItemState.PENDING, ItemState.SOURCED}:
+                item.state = ItemState.PENDING
+                item.tried_sources = []
+                item.search_rounds = 0
+                item.note = None
+
+            job.items.remove(item)
+            job.items.insert(0, item)
+
+            if job.status in {JobStatus.FINISHED, JobStatus.WAITING_RETRY, JobStatus.PREVIEWED}:
+                job.status = JobStatus.RUNNING
+                job.finished_at = None
+                job.next_retry_at = None
+
             self._mark_dirty()
 
         self._save()
@@ -385,6 +463,7 @@ class JobManager:
             "name": job.name,
             "label_id": job.label_id,
             "artist_id": job.artist_id,
+            "pause_mode": job.pause_mode,
             "mode": job.mode,
             "status": job.status,
             "blocked_reason": job.blocked_reason,
@@ -452,6 +531,7 @@ class JobManager:
                     or (job.status == JobStatus.PAUSED and self._has_downloads(job))]
 
         for job in jobs:
+            await self._apply_pause(job)
             await self._update_downloads(job)
 
             if job.status == JobStatus.PAUSED:
@@ -465,6 +545,70 @@ class JobManager:
                 self._update_job_status(job)
 
         self._save()
+
+    async def _apply_pause(self, job):
+        """Does what pausing and resuming take, since the core is out of reach where those are asked for."""
+
+        downloading = [item for item in job.items if item.state == ItemState.DOWNLOADING]
+
+        if job.status == JobStatus.PAUSED and job.pause_mode == PauseMode.NOW and not job.transfers_paused:
+            for item in downloading:
+                source = item.current_source
+                await self.runner.call_async(
+                    self.runner.automation.cancel_folder_downloads, source["username"], source["folder_path"], False
+                )
+
+            job.transfers_paused = True
+            self._mark_dirty()
+
+        elif job.status == JobStatus.PAUSED and job.pause_mode == PauseMode.AFTER_ALBUM:
+            for item in downloading:
+                if item.is_queued:
+                    await self._leave_queue(item)
+
+        elif job.status != JobStatus.PAUSED and job.transfers_paused:
+            for item in downloading:
+                await self._resume_transfers(item)
+
+            job.transfers_paused = False
+            self._mark_dirty()
+
+    async def _leave_queue(self, item):
+        """A paused job shouldn't have an album start out of the blue when the uploader gets to it."""
+
+        source = item.current_source
+        await self._cancel_unfinished(source["username"], source["folder_path"])
+
+        with self._lock:
+            entry = [source["username"], source["folder_path"]]
+
+            if entry in item.tried_sources:
+                item.tried_sources.remove(entry)
+
+            item.state = ItemState.SOURCED
+            item.is_queued = False
+            item.current_source = None
+            item.note = None
+            self._mark_dirty()
+
+    async def _resume_transfers(self, item):
+
+        source = item.current_source
+        automation = self.runner.automation
+        listing = await self.runner.call_async(
+            automation.get_downloads, "all", source["username"], source["folder_path"], 10000
+        )
+
+        for download in listing["downloads"]:
+            if download["state"] == "paused":
+                await self.runner.call_async(automation.retry_download, source["username"], download["virtual_path"])
+
+        with self._lock:
+            now = self._clock()
+            item.last_progress_at = now
+            item.last_update_at = now
+            item.speed_check_at = now
+            item.speed_check_bytes = sum(download["bytes_transferred"] for download in listing["downloads"])
 
     @staticmethod
     def _has_downloads(job):
@@ -562,6 +706,15 @@ class JobManager:
 
         return None
 
+    def _has_enough_ready(self, job):
+        """Don't search far ahead, what was found would be out of date by the time it is its turn.
+        Releases waiting for an uploader who is busy may take hours, they don't stop the search."""
+
+        num_ready = sum(1 for other in job.items
+                        if other.state == ItemState.SOURCED and self._eligible_sources(job, other)[0])
+
+        return num_ready >= job.max_active_releases * self.MAX_READY_BACKLOG_FACTOR
+
     async def _source_next(self, job):
 
         item = self._next_pending_item(job)
@@ -569,14 +722,8 @@ class JobManager:
         if item is None:
             return
 
-        if job.mode == "download":
-            # Don't search far ahead, what was found would be out of date by the time it is its turn
-            # Releases waiting for an uploader who is busy may take hours, don't let them stop the search
-            num_ready = sum(1 for other in job.items
-                            if other.state == ItemState.SOURCED and self._eligible_sources(job, other)[0])
-
-            if num_ready >= job.max_active_releases * self.MAX_READY_BACKLOG_FACTOR:
-                return
+        if job.mode == "download" and self._has_enough_ready(job):
+            return
 
         release = Release.from_dict(item.release)
 
@@ -661,6 +808,9 @@ class JobManager:
     async def _start_downloads(self, job):
 
         for item in job.items:
+            if job.status != JobStatus.RUNNING:
+                return
+
             if item.state != ItemState.SOURCED:
                 continue
 
@@ -761,6 +911,10 @@ class JobManager:
 
                 self._mark_dirty()
 
+            if job.status != JobStatus.RUNNING:
+                await self._abandon_race(item, sources, winner)
+                return
+
             queued_sources.extend(source for source in sources if source["username"] in waiting_usernames)
 
             if winner is None:
@@ -769,6 +923,17 @@ class JobManager:
 
             if await self._enqueue_folder(job, item, winner):
                 return
+
+    async def _abandon_race(self, item, sources, winner):
+        """Paused while a race was on, so whoever won doesn't get to start. All of them get another chance."""
+
+        if winner is not None:
+            await self._cancel_unfinished(winner["username"], winner["folder_path"])
+
+        with self._lock:
+            usernames = {source["username"] for source in sources}
+            item.tried_sources = [entry for entry in item.tried_sources if entry[0] not in usernames]
+            self._mark_dirty()
 
     async def _enqueue_folder(self, job, item, source, is_queued=False):
         """Requests a whole folder for a release. Returns False if that didn't work."""

@@ -235,7 +235,7 @@
 
 <main>
   <div class="floor">
-    <div class="part-head"><h2>Crates</h2></div>
+    <div class="part-head"><h2>Crates</h2><button class="act" type="button" data-export-state title="Save jobs and downloads to the drive, for another user or Mac">Export</button></div>
     <div id="crates"></div>
 
     <div class="part-head">
@@ -385,8 +385,15 @@
       const isFlacJob = (job.formats || []).join() === "flac";
       if (!isFlacJob) buttons.push(`<button class="act go" type="button" data-job-do="start-downloads" data-flac="1" data-job="${esc(job.job_id)}" title="Strictly FLAC. ${job.num_available_flac} have a FLAC copy already, the others are searched for again.">FLAC only (${job.num_available_flac}+)</button>`);
     }
-    if (job.status === "running" || job.status === "waiting_retry") buttons.push(act("pause", "Pause"));
-    if (job.status === "paused") buttons.push(act("resume", "Resume"));
+    const pauseNow = (label) => `<button class="act" type="button" data-job-do="pause" data-now="1" data-job="${esc(job.job_id)}" title="Stops right away. Albums continue from where they were on resuming.">${label}</button>`;
+    if (job.status === "running" || job.status === "waiting_retry") {
+      buttons.push(`<button class="act" type="button" data-job-do="pause" data-job="${esc(job.job_id)}" title="Albums that have started finish, nothing new starts.">Pause after album</button>`);
+      if (c.downloading) buttons.push(pauseNow("Pause now"));
+    }
+    if (job.status === "paused") {
+      buttons.push(act("resume", "Resume"));
+      if (c.downloading && job.pause_mode !== "now") buttons.push(pauseNow("Stop now"));
+    }
     if (c.not_found || c.partial) buttons.push(act("retry-missing", "Search again"));
     if (job.status === "running" || job.status === "paused" || job.status === "waiting_retry") buttons.push(act("cancel", "Cancel", "stop"));
     else buttons.push(act("remove", "Remove", "stop"));
@@ -395,6 +402,7 @@
 
   function crateState(job) {
     if (job.blocked_reason) return ["blocked", job.blocked_reason];
+    if (job.status === "paused" && job.counts.downloading && job.pause_mode !== "now") return ["running", `finishing ${job.counts.downloading} ${job.counts.downloading === 1 ? "album" : "albums"}, then paused`];
     const left = job.num_remaining_to_search;
     if (job.status === "running" && job.mode === "preview") return ["running", `looking for it, ${left} left to search`];
     if (job.status === "running") return ["running", left ? `collecting, ${left} left to search` : "collecting"];
@@ -441,6 +449,15 @@
     if (before !== painted.get($("crates"))) renderOpenCrate();
   }
 
+  function releaseActions(job, item) {
+    if (job.status === "cancelled" || item.state === "finished" || item.state === "owned") return "";
+    const act = (name, label, title) => `<button class="act" type="button" data-job-do="${name}" data-job="${esc(job.job_id)}" data-release="${esc(item.release_id)}" title="${title}">${label}</button>`;
+    const buttons = [];
+    if (item.state !== "downloading") buttons.push(act("prioritize-release", item.state === "pending" || item.state === "sourced" ? "Next" : "Try again", "Work on this one next"));
+    if (item.state !== "cancelled" && item.state !== "not_on_label") buttons.push(act("skip-release", "Skip", "Leave this one out"));
+    return buttons.join(" ");
+  }
+
   function renderOpenCrate() {
     document.querySelectorAll("[data-sheet]").forEach((box) => {
       if (box.dataset.sheet !== view.openJob || !view.jobData) { box.innerHTML = ""; delete box.dataset.painted; return; }
@@ -464,11 +481,12 @@
           <td class="word hide-small">${esc(item.kind)}</td>
           <td class="n hide-small">${item.track_count || ""}</td>
           <td><span class="word ${look}">${esc(WORDS[item.state])}</span>${item.uploader ? ` <span class="who">${esc(item.uploader)}</span>` : ""}<span class="note ellipsis" title="${esc(detail)}">${esc(detail)}</span></td>
+          <td class="n">${releaseActions(job, item)}</td>
         </tr>`;
       }).join("");
       const html = `<div class="switch" role="group" aria-label="Filter releases">${tabs}</div>
         <table class="sheet"><thead><tr><th class="hide-small">Cat. no.</th><th>Release</th><th class="n hide-small">Year</th><th class="hide-small">Kind</th>
-        <th class="n hide-small">Tracks</th><th>Status</th></tr></thead><tbody>${body || `<tr><td colspan="6" class="quiet">Nothing here.</td></tr>`}</tbody></table>`;
+        <th class="n hide-small">Tracks</th><th>Status</th><th></th></tr></thead><tbody>${body || `<tr><td colspan="7" class="quiet">Nothing here.</td></tr>`}</tbody></table>`;
       if (box.dataset.painted !== html) { box.innerHTML = html; box.dataset.painted = html; }
     });
   }
@@ -706,11 +724,18 @@
       if (data.group) { view.group = data.group; await renderDrawer(); return; }
       if (data.jobFilter) { view.jobFilter = data.jobFilter; view.pickedTitle = null; renderOpenCrate(); return; }
 
+      if (data.exportState !== undefined) {
+        const result = await api("/api/export", {});
+        alert(`Saved to ${result.path}\n\n${result.num_jobs} jobs, ${result.num_transfers} downloads. No Soulseek login in it.\n\nThe other user runs:\nnicotine-mcp import "${result.path}"\n\n${result.warning}`);
+        return;
+      }
+
       if (data.jobDo) {
         if (data.jobDo === "cancel" && !confirm("Cancel this job and remove its unfinished downloads? Finished files stay.")) return;
         if (data.jobDo === "remove" && !confirm("Remove this from the list? Its files stay on disk.")) return;
         if (data.jobDo === "remove" && view.openJob === data.job) { view.openJob = null; view.jobData = null; }
-        await api(`/api/jobs/${data.jobDo}`, {job_id: data.job, flac_only: data.flac === "1"});
+        if (data.jobDo === "skip-release" && !confirm("Skip this release? Its unfinished downloads are removed.")) return;
+        await api(`/api/jobs/${data.jobDo}`, {job_id: data.job, flac_only: data.flac === "1", now: data.now === "1", release_id: data.release});
         await refresh();
         await loadOpenCrate();
         return;

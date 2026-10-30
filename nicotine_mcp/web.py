@@ -30,7 +30,9 @@ from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
 from nicotine_mcp.automation import make_preferences
+from nicotine_mcp.job_models import PauseMode
 from nicotine_mcp.mcp_compat import anyio
+from nicotine_mcp.portable import export_running
 
 LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "[::1]", "::1"}
 REQUEST_HEADER = "X-Requested-With"
@@ -218,6 +220,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             elif url.path == "/api/searches/stop":
                 result = {"stopped": self._call(automation.stop_search, int(data["token"]))}
 
+            elif url.path == "/api/export":
+                result = export_running(self.runner, data.get("path"))
+
             elif url.path.startswith("/api/jobs/"):
                 result = self._post_job_action(url.path.rpartition("/")[-1], data)
 
@@ -239,7 +244,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         job_id = data["job_id"]
 
         if action == "pause":
-            return jobs.pause_job(job_id)
+            return jobs.pause_job(job_id, PauseMode.NOW if data.get("now") else PauseMode.AFTER_ALBUM)
+
+        if action == "skip-release":
+            return anyio.run(jobs.skip_release, job_id, data["release_id"])
+
+        if action == "prioritize-release":
+            return jobs.prioritize_release(job_id, data["release_id"])
 
         if action == "resume":
             return jobs.resume_job(job_id)

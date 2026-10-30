@@ -158,9 +158,11 @@ reports the dashboard URL to the agent, so it can point you there.
 | `find_artist`              | Find artists by name in MusicBrainz and Discogs |
 | `get_artist_releases`      | An artist's discography, with editions merged and what you already own marked |
 | `start_artist_job`         | Start a background job that previews or downloads an artist's discography |
+| `skip_release`, `prioritize_release` | Leave a release out of a job, or make it the next to go (also brings one back) |
+| `export_state`             | Save jobs and downloads to a file for another user with the same drive |
 | `get_job`, `list_jobs`     | Progress of jobs, and what they found for each release |
 | `start_job_downloads`      | Start downloading what a preview found |
-| `pause_job`, `resume_job`  | Stop and continue searching and starting downloads |
+| `pause_job`, `resume_job`  | Finish the albums that have started and start nothing new, or with `now` stop them where they are. Resume continues |
 | `retry_job_missing`        | Search right away for the releases a job did not find |
 | `cancel_job`               | Stop a job and remove its unfinished downloads, finished files stay |
 | `remove_job`               | Forget a job that is over, its files stay |
@@ -313,6 +315,31 @@ Known limitations:
   removed once a job fetches their tracklists (state `not_on_label`).
 - Only file names and lengths are compared, audio files are not fingerprinted.
 
+
+## Moving to another user or Mac
+
+Jobs, whether running, paused or previewed, can move along with the drive they download to:
+
+```sh
+nicotine-mcp export          # or the Export button on the dashboard
+# on the other side, with the server stopped and the drive connected:
+nicotine-mcp import "/Volumes/T7 Shield/Music/nicotine-mcp-export.json"
+```
+
+The export lands next to the download folder, on the drive. It holds the jobs, the download list,
+measured uploader speeds, and these settings: download and incomplete folders, shares and speed
+limits. **Your Soulseek login is not in it**, so the other user needs their own account. Partial
+files carry on from where they were.
+
+- Importing adds to what is there. A job in both is replaced by the exported copy, and a backup
+  goes in a `nicotine_mcp_backup_*` folder in the data folder first.
+- Importing also takes over the shares, so the other user's account shares those folders. Use
+  `--keep-settings` to keep your own settings instead.
+- If the drive has another path there, use `--map-path "/Volumes/T7 Shield=/Volumes/Music"`.
+- Don't run both servers at once, as both would download the same albums. Nothing can
+  check for this across users.
+- Uploaders' queues don't move along. Albums in a queue line up again under the new account.
+- `--library` folders and `DISCOGS_TOKEN` are not part of it, as they are not saved anywhere.
 
 ## Tips for agents
 

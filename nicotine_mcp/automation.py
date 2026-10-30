@@ -811,6 +811,18 @@ class Automation:
 
         return list(dict.fromkeys(folders))
 
+    def prepare_export(self):
+        """Saves what is in memory, and says what an export needs to know."""
+
+        core.downloads._save_transfers()  # pylint: disable=protected-access
+        self.speeds.save()
+
+        return {
+            "data_folder": config.data_folder_path,
+            "download_folder": core.downloads.get_default_download_folder(),
+            "transfer_settings": dict(config.sections["transfers"])
+        }
+
     def get_dashboard_state(self):
         """Everything the web dashboard shows, in one call."""
 

@@ -35,6 +35,8 @@ from nicotine_mcp.mcp_compat import anyio
 from nicotine_mcp.runner import CoreRunner
 from nicotine_mcp.sourcing import ReleaseSourcer
 from nicotine_mcp.sourcing import pick_probe_file
+from nicotine_mcp.portable import remove_server_info
+from nicotine_mcp.portable import write_server_info
 from nicotine_mcp.speed import Entrant
 from nicotine_mcp.speed import pick_entrants
 from nicotine_mcp.speed import race_downloads
@@ -103,6 +105,11 @@ Typical workflows:
   and start_artist_job, passing the artist's ID in both catalogs as artist_id and
   also_artist_id. Compilations they only appear on are left out unless include_appearances
   is set. Aliases and side projects count as artists of their own.
+- Controlling a job: pause_job finishes the albums that have started by default, and with
+  now=true stops them where they are. skip_release leaves one out, and prioritize_release
+  makes one the next to go, or brings it back.
+- Handing over to another user or Mac with the same drive: export_state writes everything
+  to a file on the drive, and the other user runs `nicotine-mcp import FILE`.
 
 When FLAC is asked for, pass flac_only=true to any download tool. It's strict: nothing else
 is downloaded, and a copy in another format doesn't count as already owned.
@@ -569,6 +576,7 @@ class MCPApplication:
         # The default action ends the process right away, without saving the download list. That
         # includes after the HTTP server has shut down, as it raises the signal it caught again.
         signal.signal(signal.SIGTERM, _stop_on_signal)
+        write_server_info(config.data_folder_path, runner.dashboard_url)
 
         try:
             if self.http_port:
@@ -584,6 +592,8 @@ class MCPApplication:
             exit_code = 1
 
         finally:
+            remove_server_info(config.data_folder_path)
+
             if dashboard is not None:
                 dashboard.stop()
 

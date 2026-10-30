@@ -34,6 +34,14 @@ class ItemState:
     ALL = (PENDING, SOURCED, DOWNLOADING, FINISHED, OWNED, PARTIAL, NOT_FOUND, FAILED, NOT_ON_LABEL, CANCELLED)
 
 
+class PauseMode:
+
+    AFTER_ALBUM = "after_album"  # Albums that have started finish, nothing new starts
+    NOW = "now"  # Transfers stop right away, and continue from where they were on resuming
+
+    ALL = (AFTER_ALBUM, NOW)
+
+
 class JobStatus:
 
     RUNNING = "running"
@@ -82,6 +90,8 @@ class Job:
     label_id: str | None
     mode: str
     artist_id: str | None = None
+    pause_mode: str | None = None
+    transfers_paused: bool = False  # We stopped transfers that have to be started again
     status: str = JobStatus.RUNNING
     created_at: float = 0.0
     finished_at: float | None = None

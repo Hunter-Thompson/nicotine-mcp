@@ -80,6 +80,7 @@ JobMode = described(
     Literal["preview", "download"],
     "'preview' finds out what is available without downloading anything. 'download' also downloads it."
 )
+ReleaseInJob = described(str, "Release ID of a release in the job, as get_job shows it.")
 MaxReleases = described(int | None, "Only work on this many releases (None = all of them).")
 Sample = described(
     bool, "With max_releases, spread the releases over the whole catalog, not only the newest. "

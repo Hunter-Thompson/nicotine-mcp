@@ -11,9 +11,11 @@ from typing import Literal
 
 from nicotine_mcp.catalog import CatalogError
 from nicotine_mcp.catalog import DISCOGS
+from nicotine_mcp.job_models import PauseMode
 from nicotine_mcp.matching import assess_album_folder
 from nicotine_mcp.mcp_compat import ToolError
 from nicotine_mcp.mcp_compat import anyio
+from nicotine_mcp.portable import export_running
 from nicotine_mcp.ranking import is_file_wanted
 from nicotine_mcp.sourcing import pick_probe_file
 from nicotine_mcp.tool_params import AcceptPartial
@@ -42,6 +44,7 @@ from nicotine_mcp.tool_params import MinBitrate
 from nicotine_mcp.tool_params import MinSpeedKbps
 from nicotine_mcp.tool_params import Prefer
 from nicotine_mcp.tool_params import ReleaseId
+from nicotine_mcp.tool_params import ReleaseInJob
 from nicotine_mcp.tool_params import RetryMissingHours
 from nicotine_mcp.tool_params import Sample
 from nicotine_mcp.tool_params import SearchIntervalSeconds
@@ -583,16 +586,56 @@ def register_collection_tools(tool, runner, preferences, run_search):
         return job_call(runner.jobs.start_downloads, job_id, accept_partial, flac_only)
 
     @tool()
-    async def pause_job(job_id: JobId) -> dict:
-        """Stops a job from searching and starting downloads. Transfers already started keep going."""
+    async def pause_job(
+        job_id: JobId,
+        now: described(
+            bool, "Stop the albums that have started right away, instead of letting them finish. "
+                  "They continue from where they were on resuming."
+        ) = False
+    ) -> dict:
+        """Stops a job from searching and starting downloads. By default the albums that have started
+        finish first. Albums only waiting in an uploader's queue leave it, and queue again on resuming."""
 
-        return job_call(runner.jobs.pause_job, job_id)
+        return job_call(runner.jobs.pause_job, job_id, PauseMode.NOW if now else PauseMode.AFTER_ALBUM)
 
     @tool()
     async def resume_job(job_id: JobId) -> dict:
         """Continues a paused job."""
 
         return job_call(runner.jobs.resume_job, job_id)
+
+    @tool()
+    async def skip_release(job_id: JobId, release_id: ReleaseInJob) -> dict:
+        """Leaves a release out of a job, and removes its unfinished downloads. Finished files stay on disk."""
+
+        try:
+            return await runner.jobs.skip_release(job_id, release_id)
+
+        except (KeyError, ValueError) as error:
+            raise ToolError(str(error.args[0] if error.args else error)) from error
+
+    @tool()
+    async def prioritize_release(job_id: JobId, release_id: ReleaseInJob) -> dict:
+        """Makes a release the next one a job works on. Also brings back one that was skipped or not found."""
+
+        return job_call(runner.jobs.prioritize_release, job_id, release_id)
+
+    @tool()
+    async def export_state(
+        path: described(
+            str | None, "File to write. Defaults to nicotine-mcp-export.json next to the download folder, which "
+                        "puts it on the drive. Can't be in a shared folder."
+        ) = None
+    ) -> dict:
+        """Writes all jobs, the download list and shared settings to a file, for another user or Mac with the same
+        drive. They run `nicotine-mcp import FILE`. The Soulseek login is not included. This server has to
+        stop before theirs starts, or both download the same albums."""
+
+        try:
+            return await anyio.to_thread.run_sync(export_running, runner, path)
+
+        except (OSError, ValueError) as error:
+            raise ToolError(str(error)) from error
 
     @tool()
     async def retry_job_missing(job_id: JobId) -> dict:

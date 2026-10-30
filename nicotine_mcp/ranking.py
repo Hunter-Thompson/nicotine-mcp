@@ -11,7 +11,8 @@ A file candidate is scored on three axes:
 
 - availability: whether the uploader has a free upload slot, and how long
   their queue is otherwise ("no queue" is what an agent usually wants)
-- speed: the uploader's reported upload speed
+- speed: how fast the uploader was when measured. The speed uploaders report
+  doesn't predict what they deliver, so it counts for little
 - quality: lossless beats lossy, higher bitrate beats lower bitrate
 
 The weights of the axes depend on the ``prefer`` preference. Hard filters
@@ -81,9 +82,16 @@ _DEFAULT_MAX_PER_USER = 3
 
 _TOKEN_SPLIT_REGEX = re.compile(r"[^0-9a-z]+")
 
-# Upload speed range used for the logarithmic speed score (bytes/second)
+# Measured speed range used for the logarithmic speed score (bytes/second)
 _SPEED_FLOOR = 50_000
-_SPEED_CEILING_DECADES = 3  # 50 KB/s -> 50 MB/s
+_SPEED_CEILING = 5_000_000
+
+# A reported speed only tells that the uploader has uploaded something recently. This is as
+# many points as somebody measured at about 150 KB/s gets, so that somebody unknown is
+# preferred over somebody known to be slow, and somebody known to be fast over somebody unknown.
+_REPORTED_SPEED_POINTS = 5.0
+_REPORTED_SPEED_FLOOR = 10_000
+_REPORTED_SPEED_ENOUGH = 100_000
 
 
 def get_extension(path: str) -> str:
@@ -228,6 +236,7 @@ class FileCandidate:
     has_free_slot: bool = False
     queue_length: int = 0
     upload_speed: int = 0
+    measured_speed: int = 0
     country_code: str = ""
     is_private: bool = False
 
@@ -332,6 +341,10 @@ class FolderCandidate:
         return max((candidate.upload_speed for candidate in self.files), default=0)
 
     @property
+    def measured_speed(self) -> int:
+        return max((candidate.measured_speed for candidate in self.files), default=0)
+
+    @property
     def country_code(self) -> str:
         return next((candidate.country_code for candidate in self.files if candidate.country_code), "")
 
@@ -345,6 +358,16 @@ class FolderCandidate:
 
 
 # Filters #
+
+
+def is_file_wanted(basename: str, formats: list | None) -> bool:
+    """Says if a file of a folder should be used, given the formats asked for. A folder can
+    hold an album in both FLAC and MP3. Other files, such as cover art, are not affected."""
+
+    allowed_formats = normalize_formats(formats)
+    extension = get_extension(basename)
+
+    return not allowed_formats or not is_audio_extension(extension) or extension in allowed_formats
 
 
 def check_file_filters(candidate: FileCandidate, prefs: RankingPreferences) -> str | None:
@@ -389,13 +412,19 @@ def availability_points(has_free_slot: bool, queue_length: int) -> float:
     return _AVAILABILITY_POINTS / (1 + max(0, queue_length) / 3)
 
 
-def speed_points(upload_speed: int) -> float:
+def speed_points(upload_speed: int, measured_speed: int = 0) -> float:
+
+    if measured_speed > 0:
+        fraction = math.log10(measured_speed / _SPEED_FLOOR) / math.log10(_SPEED_CEILING / _SPEED_FLOOR)
+        return _SPEED_POINTS * min(1.0, max(0.0, fraction))
 
     if upload_speed <= 0:
         return 0.0
 
-    decades = math.log10(max(upload_speed, 1) / _SPEED_FLOOR)
-    return _SPEED_POINTS * min(1.0, max(0.0, decades / _SPEED_CEILING_DECADES))
+    fraction = math.log10(max(upload_speed, 1) / _REPORTED_SPEED_FLOOR) / math.log10(
+        _REPORTED_SPEED_ENOUGH / _REPORTED_SPEED_FLOOR
+    )
+    return _REPORTED_SPEED_POINTS * min(1.0, max(0.0, fraction))
 
 
 def quality_points(candidate: FileCandidate) -> float:
@@ -468,7 +497,7 @@ def score_file(candidate: FileCandidate, prefs: RankingPreferences, duplicates: 
     availability_weight, speed_weight, quality_weight = prefs.weights
 
     availability = availability_points(candidate.has_free_slot, candidate.queue_length)
-    speed = speed_points(candidate.upload_speed)
+    speed = speed_points(candidate.upload_speed, candidate.measured_speed)
     quality = quality_points(candidate)
     format_preference = prefs.format_preference_points(candidate.extension)
     popularity = min(_DUPLICATE_POINTS_MAX, float(duplicates))
@@ -541,7 +570,9 @@ def rank_files(candidates, prefs: RankingPreferences | None = None, limit: int |
 
     # Stable sort: best score first, then faster uploader, then smaller queue, then larger file
     accepted.sort(
-        key=lambda item: (-item.score, -item.upload_speed, item.queue_length, -item.size, item.key)
+        key=lambda item: (
+            -item.score, -item.measured_speed, -item.upload_speed, item.queue_length, -item.size, item.key
+        )
     )
 
     return _limit_per_user(accepted, prefs, limit)
@@ -579,7 +610,7 @@ def score_folder(folder: FolderCandidate, prefs: RankingPreferences, duplicates:
         return 0.0, {"rejected": "no audio files matching the requested formats/filters"}
 
     availability = availability_points(folder.has_free_slot, folder.queue_length)
-    speed = speed_points(folder.upload_speed)
+    speed = speed_points(folder.upload_speed, folder.measured_speed)
     quality = sum(quality_points(candidate) for candidate in accepted_files) / len(accepted_files)
     format_preference = sum(
         prefs.format_preference_points(candidate.extension) for candidate in accepted_files
@@ -645,7 +676,9 @@ def rank_folders(candidates, prefs: RankingPreferences | None = None, limit: int
         accepted.append(folder)
 
     accepted.sort(
-        key=lambda item: (-item.score, -item.upload_speed, item.queue_length, -len(item.files), item.key)
+        key=lambda item: (
+            -item.score, -item.measured_speed, -item.upload_speed, item.queue_length, -len(item.files), item.key
+        )
     )
 
     return _limit_per_user(accepted, prefs, limit)

@@ -7,6 +7,7 @@ from nicotine_mcp.ranking import FileCandidate
 from nicotine_mcp.ranking import RankingPreferences
 from nicotine_mcp.ranking import check_file_filters
 from nicotine_mcp.ranking import get_extension
+from nicotine_mcp.ranking import is_file_wanted
 from nicotine_mcp.ranking import normalize_formats
 from nicotine_mcp.ranking import rank_files
 from nicotine_mcp.ranking import rank_folders
@@ -164,15 +165,33 @@ class FileRankingTest(TestCase):
         ranked = rank_files([flac, mp3], RankingPreferences(prefer="availability"))
         self.assertEqual(ranked[0].username, "mp3")
 
-    def test_speed_is_tie_breaker(self):
+    def test_measured_speed_is_tie_breaker(self):
 
-        slow = make_candidate(username="slow", upload_speed=100_000)
-        fast = make_candidate(username="fast", upload_speed=20_000_000)
+        slow = make_candidate(username="slow", measured_speed=100_000)
+        fast = make_candidate(username="fast", measured_speed=2_000_000)
 
         ranked = rank_files([slow, fast])
 
         self.assertEqual(ranked[0].username, "fast")
         self.assertGreater(fast.score_details["speed"], slow.score_details["speed"])
+
+    def test_reported_speed_counts_for_little(self):
+        """The measurement that led to this: 8.3 MB/s reported, 96 KB/s delivered."""
+
+        claims_a_lot = make_candidate(username="claims", upload_speed=8_300_000, measured_speed=96_000)
+        measured_fast = make_candidate(username="measured", upload_speed=1_900_000, measured_speed=1_700_000)
+        unknown = make_candidate(username="unknown", upload_speed=120_000_000)
+
+        ranked = rank_files([claims_a_lot, measured_fast, unknown])
+
+        self.assertEqual([item.username for item in ranked], ["measured", "unknown", "claims"])
+
+    def test_reported_speed_of_nothing(self):
+
+        idle = make_candidate(username="idle", upload_speed=0)
+        active = make_candidate(username="active", upload_speed=200_000)
+
+        self.assertEqual(rank_files([idle, active])[0].username, "active")
 
     def test_format_preference_order(self):
 
@@ -265,10 +284,10 @@ class FileRankingTest(TestCase):
     def test_max_per_user(self):
 
         candidates = [
-            make_candidate(username="hoarder", virtual_path=f"x\\{i}.flac", upload_speed=50_000_000)
+            make_candidate(username="hoarder", virtual_path=f"x\\{i}.flac", measured_speed=5_000_000)
             for i in range(5)
         ]
-        candidates.append(make_candidate(username="other", virtual_path="y\\0.flac", upload_speed=100_000))
+        candidates.append(make_candidate(username="other", virtual_path="y\\0.flac", measured_speed=100_000))
 
         ranked = rank_files(candidates, RankingPreferences(max_per_user=2))
         self.assertEqual([candidate.username for candidate in ranked], ["hoarder", "hoarder", "other"])
@@ -364,3 +383,28 @@ class FolderRankingTest(TestCase):
         self.assertEqual(folder.upload_speed, 5_000_000)
         self.assertEqual(folder.queue_length, 2)
         self.assertFalse(folder.has_free_slot)
+
+
+class FileWantedTest(TestCase):
+
+    def test_formats(self):
+
+        self.assertTrue(is_file_wanted("a.flac", ["flac"]))
+        self.assertTrue(is_file_wanted("a.FLAC", ["flac"]))
+        self.assertFalse(is_file_wanted("a.mp3", ["flac"]))
+
+    def test_other_files_come_along(self):
+
+        self.assertTrue(is_file_wanted("cover.jpg", ["flac"]))
+        self.assertTrue(is_file_wanted("rip.log", ["flac"]))
+
+    def test_everything_without_formats(self):
+
+        self.assertTrue(is_file_wanted("a.mp3", None))
+        self.assertTrue(is_file_wanted("a.mp3", []))
+        self.assertTrue(is_file_wanted("a.mp3", ["any"]))
+
+    def test_groups(self):
+
+        self.assertTrue(is_file_wanted("a.wav", ["lossless"]))
+        self.assertFalse(is_file_wanted("a.mp3", ["lossless"]))

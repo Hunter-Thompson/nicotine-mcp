@@ -31,6 +31,11 @@ def build_parser():
     group.add_argument("--isolated", action="store_true",
                        help="disable features that need external applications (e.g. inside containers)")
 
+    group = parser.add_argument_group("Library")
+    group.add_argument("--library", metavar="DIR", action="append", default=[],
+                       help="folder with music you already have, not downloaded again by label jobs and album "
+                            "downloads (can be repeated; the download folder and shares are always included)")
+
     group = parser.add_argument_group("MCP transport")
     group.add_argument("--http", metavar="PORT", type=int, nargs="?", const=DEFAULT_HTTP_PORT,
                        help=f"serve MCP over streamable HTTP on this port instead of stdio "
@@ -81,5 +86,6 @@ def main(argv=None):
         http_host=args.http_host,
         ui_port=None if args.no_ui else args.ui_port,
         ui_host=args.ui_host,
-        open_ui=args.open_ui
+        open_ui=args.open_ui,
+        library_folders=args.library
     ).run()

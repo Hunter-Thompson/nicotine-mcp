@@ -9,125 +9,312 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nicotine+ MCP</title>
 <style>
+  /* Black wax and sleeve paper. One signal color, amber like a level meter: it means something is moving. */
   :root {
-    --bg: #f4f5f7; --panel: #ffffff; --text: #1c1f26; --muted: #6b7280; --line: #e3e6eb;
-    --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --idle: #6b7280;
-    --bar-bg: #e5e7eb; --row-hover: #f8fafc; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: dark;
+    --wax: #111110; --wax-raised: #171715; --wax-lifted: #1e1d1a; --wax-well: #0c0c0b;
+    --ink: #ebe6da; --ink-soft: #b4afa0; --ink-faint: #858073; --ink-ghost: #5c584e;
+    --groove: rgba(235, 230, 218, .09); --groove-soft: rgba(235, 230, 218, .05); --groove-firm: rgba(235, 230, 218, .18);
+    --signal: #f0a22e; --signal-wash: rgba(240, 162, 46, .12);
+    --oxide: #e0603f; --oxide-wash: rgba(224, 96, 63, .12); --lamp-on: #9cc46f;
+    --spine-unheard: #2b2a26; --spine-found: #79756a; --spine-yours: #ebe6da; --spine-owned: #a9a496;
+    --type-data: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --type-label: "Avenir Next Condensed", "Roboto Condensed", "Helvetica Neue", "Arial Narrow", sans-serif;
+    --type-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
+  @media (prefers-color-scheme: light) {
     :root {
-      --bg: #0f1115; --panel: #171a21; --text: #e6e8ee; --muted: #9aa3b2; --line: #272b35;
-      --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --idle: #9aa3b2;
-      --bar-bg: #262a33; --row-hover: #1d2129;
+      color-scheme: light;
+      --wax: #efeadf; --wax-raised: #f6f2e9; --wax-lifted: #fbf8f1; --wax-well: #e7e1d4;
+      --ink: #1c1a15; --ink-soft: #55513f; --ink-faint: #7f7a69; --ink-ghost: #a6a08e;
+      --groove: rgba(28, 26, 21, .12); --groove-soft: rgba(28, 26, 21, .07); --groove-firm: rgba(28, 26, 21, .26);
+      --signal: #b86c00; --signal-wash: rgba(184, 108, 0, .12);
+      --oxide: #b63c1e; --oxide-wash: rgba(182, 60, 30, .1); --lamp-on: #4f8a26;
+      --spine-unheard: #dcd6c7; --spine-found: #938d7b; --spine-yours: #1c1a15; --spine-owned: #5b5748;
     }
   }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 14px 20px;
-           background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
-  header h1 { font-size: 17px; margin: 0; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
-          font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
-  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
-  .pill.online .dot { background: var(--ok); }
-  .pill.offline .dot { background: var(--bad); }
-  .muted { color: var(--muted); }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--wax); color: var(--ink); font: 13px/1.45 var(--type-body); }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .data { font-family: var(--type-data); font-variant-numeric: tabular-nums; }
+  .label { font: 600 12px/1 var(--type-label); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); }
+  .quiet { color: var(--ink-faint); }
+  .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+  /* The meter: what is coming in right now */
+  .deck { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: auto minmax(120px, 1fr) auto;
+          gap: 8px 28px; align-items: center; padding: 12px 24px; background: var(--wax);
+          border-bottom: 1px solid var(--groove); }
+  .deck-rate { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+  .deck-rate .value { font: 500 34px/1 var(--type-data); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .deck-rate.moving .value { color: var(--signal); }
+  .deck-rate .unit { font: 500 13px/1 var(--type-data); color: var(--ink-faint); }
+  .trace { height: 40px; width: 100%; display: block; }
+  .trace path { fill: none; stroke: var(--signal); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
+  .trace path.area { fill: var(--signal-wash); stroke: none; }
+  .trace line { stroke: var(--groove); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .deck-side { display: flex; align-items: center; gap: 20px; justify-content: flex-end; flex-wrap: wrap; }
+  .tally { display: flex; gap: 14px; }
+  .tally div { display: flex; flex-direction: column; gap: 3px; min-width: 40px; }
+  .tally b { font: 500 15px/1 var(--type-data); font-variant-numeric: tabular-nums; }
+  .tally .bad b { color: var(--oxide); }
+  .lamp { display: flex; align-items: center; gap: 8px; max-width: 320px; }
+  .lamp i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--oxide); }
+  .lamp.on i { background: var(--lamp-on); }
+  .lamp div { min-width: 0; }
+  .lamp strong { display: block; font-weight: 600; }
+  .lamp small { display: block; font: 11px/1.4 var(--type-data); color: var(--ink-faint); }
+
+  /* Layout */
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0; align-items: start; }
+  .floor { min-width: 0; padding: 0 24px 48px; }
+  .rail { position: sticky; top: 65px; max-height: calc(100vh - 65px); overflow: auto; border-left: 1px solid var(--groove);
+          padding: 0 16px 24px; }
+  .part-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 28px; margin: 24px 0 10px; }
+  .part-head h2 { margin: 0; font: 600 13px/1 var(--type-label); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
   .spacer { flex: 1; }
-  main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-  .tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .tile .value { font-size: 24px; font-weight: 700; margin-top: 2px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; }
-  section > .head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px;
-                    border-bottom: 1px solid var(--line); }
-  section > .head h2 { font-size: 14px; margin: 0; }
-  .tabs { display: flex; gap: 4px; }
-  .tabs button, .btn { background: transparent; color: var(--text); border: 1px solid var(--line);
-                       border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-  .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn:hover, .tabs button:hover { border-color: var(--accent); }
-  .btn.danger:hover { border-color: var(--bad); color: var(--bad); }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
-  tr:hover td { background: var(--row-hover); }
-  td.file { max-width: 420px; }
-  td.file .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  td.file .folder { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
-           color: #fff; background: var(--idle); white-space: nowrap; }
-  .badge.active { background: var(--accent); } .badge.finished { background: var(--ok); }
-  .badge.queued { background: var(--warn); } .badge.failed { background: var(--bad); }
-  .bar { width: 140px; height: 8px; background: var(--bar-bg); border-radius: 4px; overflow: hidden; }
-  .bar > div { height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s; }
-  .bar.finished > div { background: var(--ok); }
-  .progress { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-  .actions { white-space: nowrap; }
-  .actions .btn { padding: 2px 8px; margin-left: 4px; }
-  .empty { padding: 18px 14px; color: var(--muted); }
-  .searches tr { cursor: pointer; }
-  .searches tr.selected td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .results { border-top: 1px solid var(--line); }
-  .results .head { padding: 8px 14px; display: flex; gap: 10px; align-items: center; }
-  pre.log { margin: 0; padding: 10px 14px; font: 12px/1.5 var(--mono); max-height: 260px; overflow: auto;
-            white-space: pre-wrap; word-break: break-word; }
-  .error { color: var(--bad); }
-  @media (max-width: 800px) { .bar { width: 80px; } td.file { max-width: 200px; } }
+  .empty { padding: 20px 0; color: var(--ink-faint); }
+
+  /* Controls */
+  .act { background: transparent; border: 1px solid var(--groove); border-radius: 2px; padding: 3px 8px; font-size: 12px;
+         color: var(--ink-soft); cursor: pointer; white-space: nowrap; transition: border-color .12s, color .12s; }
+  .act:hover { border-color: var(--groove-firm); color: var(--ink); }
+  .act:active { background: var(--wax-lifted); }
+  .act.go { color: var(--signal); border-color: var(--signal); }
+  .act.go:hover { background: var(--signal-wash); color: var(--signal); }
+  .act.stop:hover { border-color: var(--oxide); color: var(--oxide); }
+  .switch { display: flex; gap: 2px; flex-wrap: wrap; }
+  .switch button { background: transparent; border: 0; border-radius: 2px; padding: 3px 7px; font-size: 12px; color: var(--ink-faint); cursor: pointer; }
+  .switch button:hover { color: var(--ink); }
+  .switch button[aria-pressed="true"] { background: var(--wax-lifted); color: var(--ink); }
+  .switch b { font: 400 11px var(--type-data); color: var(--ink-ghost); margin-left: 3px; }
+  .switch button[aria-pressed="true"] b { color: var(--ink-faint); }
+
+  /* Crates: a label's catalog as a shelf of record spines */
+  .crate { border-top: 1px solid var(--groove); padding: 14px 0 18px; }
+  .crate:first-of-type { border-top: 0; padding-top: 2px; }
+  .crate-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .crate-head h3 { margin: 0; font: 600 21px/1.1 var(--type-label); letter-spacing: .01em; text-transform: uppercase; }
+  .crate-head button.name { all: unset; cursor: pointer; }
+  .crate-head button.name:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .crate-head button.name:hover h3 { color: var(--signal); }
+  .crate-state { font: 12px var(--type-data); color: var(--ink-faint); }
+  .crate-state.blocked { color: var(--oxide); }
+  .crate-state.running { color: var(--signal); }
+  .crate-actions { display: flex; gap: 6px; margin-left: auto; align-self: center; }
+
+  .shelf { display: flex; flex-wrap: wrap; gap: 3px 1px; align-items: flex-end; }
+  .spine { position: relative; display: block; height: 42px; width: var(--thick, 6px); padding: 0; border: 0; cursor: pointer;
+           background: var(--spine-unheard); box-shadow: 0 2px 0 var(--groove-firm); transition: filter .12s; }
+  .spine:hover, .spine:focus-visible { filter: brightness(1.35); z-index: 1; }
+  .spine.found { background: var(--spine-found); }
+  .spine.yours { background: var(--spine-yours); }
+  .spine.owned { background: var(--spine-owned); }
+  .spine.missing { background: transparent; box-shadow: inset 0 0 0 1px var(--groove-firm), 0 2px 0 var(--groove-firm); }
+  .spine.lost { background: var(--oxide); }
+  .spine.gone { background: transparent; box-shadow: 0 2px 0 var(--groove); }
+  .spine.moving { background: linear-gradient(to top, var(--signal) var(--fill, 0%), var(--signal-wash) var(--fill, 0%)); }
+  .spine.picked { outline: 1px solid var(--ink); outline-offset: 1px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font: 11px/1.5 var(--type-data); color: var(--ink-faint); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 4px; height: 11px; background: var(--spine-unheard); }
+  .legend i.found { background: var(--spine-found); }
+  .legend i.yours { background: var(--spine-yours); }
+  .legend i.owned { background: var(--spine-owned); }
+  .legend i.moving { background: var(--signal); }
+  .legend i.missing, .legend i.gone { background: transparent; box-shadow: inset 0 0 0 1px var(--groove-firm); }
+  .legend i.lost { background: var(--oxide); }
+  .legend b { font-weight: 500; color: var(--ink-soft); }
+
+  .card { position: fixed; z-index: 5; max-width: 320px; pointer-events: none; padding: 8px 10px; background: var(--wax-lifted);
+          border: 1px solid var(--groove-firm); border-radius: 2px; }
+  .card[hidden] { display: none; }
+  .card strong { display: block; font-size: 13px; font-weight: 600; }
+  .card span { display: block; color: var(--ink-soft); }
+  .card small { display: block; margin-top: 3px; font: 11px/1.45 var(--type-data); color: var(--ink-faint); }
+
+  /* Tables */
+  .sheet { width: 100%; border-collapse: collapse; }
+  .sheet th { font: 600 11px/1 var(--type-label); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint);
+              text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--groove); white-space: nowrap; }
+  .sheet td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--groove-soft); vertical-align: baseline; }
+  .sheet tbody tr:hover td { background: var(--groove-soft); }
+  .sheet tr.picked td { background: var(--signal-wash); }
+  .sheet .n { text-align: right; white-space: nowrap; font: 12px var(--type-data); font-variant-numeric: tabular-nums; }
+  .sheet .cat { font: 12px var(--type-data); color: var(--ink-faint); white-space: nowrap; }
+  .sheet .who { font: 12px var(--type-data); color: var(--ink-soft); }
+  .name-cell { max-width: 0; width: 45%; }
+  .name-cell strong { display: block; font-weight: 500; }
+  .name-cell small { display: block; color: var(--ink-faint); font-size: 12px; }
+  .word { font: 11px var(--type-data); white-space: nowrap; color: var(--ink-faint); }
+  .word.moving, .word.active, .word.downloading { color: var(--signal); }
+  .word.yours, .word.finished { color: var(--ink); }
+  .word.lost, .word.failed { color: var(--oxide); }
+  .crate-sheet:not(:empty) { margin-top: 14px; }
+  .crate-sheet .switch { margin-bottom: 8px; }
+  .crate-sheet .note { display: block; max-width: 340px; color: var(--ink-faint); font-size: 12px; }
+
+  /* Transfers, one row per album */
+  .haul { border-top: 1px solid var(--groove-soft); }
+  .haul:first-child { border-top: 1px solid var(--groove); }
+  .haul-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 150px 86px 86px auto; gap: 14px; align-items: center;
+              padding: 8px 0; cursor: pointer; }
+  .haul-row:hover { background: var(--groove-soft); }
+  .haul-row strong { display: block; font-weight: 500; }
+  .haul-row small { display: block; font-size: 12px; color: var(--ink-faint); }
+  .haul-who { font: 12px var(--type-data); color: var(--ink-soft); }
+  .haul-count, .haul-rate { font: 12px var(--type-data); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .haul-rate.moving { color: var(--signal); }
+  .haul-actions { display: flex; gap: 4px; }
+  .level { position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: transparent; }
+  .level div { height: 100%; background: var(--signal); transition: width .5s ease-out; }
+  .level.done div { background: var(--ink-faint); }
+  .haul .sheet { margin: 0 0 10px; }
+  .haul .sheet td:first-child, .haul .sheet th:first-child { padding-left: 14px; }
+
+  /* Rail */
+  .rail .part-head { margin-top: 18px; }
+  .board { display: grid; gap: 8px; }
+  .board div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; font: 12px var(--type-data); }
+  .board span.rate { color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .board i { grid-column: 1 / -1; height: 2px; background: var(--groove-soft); }
+  .board i::before { content: ""; display: block; height: 100%; width: var(--reach, 0%); background: var(--ink-faint); }
+  .board-note { margin: 8px 0 0; font-size: 12px; color: var(--ink-faint); }
+  .queries { display: grid; }
+  .queries button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 5px 4px; cursor: pointer;
+                    border-bottom: 1px solid var(--groove-soft); font-size: 12px; }
+  .queries button:hover, .queries button.picked { background: var(--groove-soft); }
+  .queries button:focus-visible { outline: 2px solid var(--signal); }
+  .queries b { font: 400 11px var(--type-data); color: var(--ink-faint); }
+  .queries .live { color: var(--signal); }
+  pre.log { margin: 0; padding: 8px; background: var(--wax-well); border-radius: 2px; font: 11px/1.55 var(--type-data); color: var(--ink-faint);
+            max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  .foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; font: 11px var(--type-data); color: var(--ink-faint); }
+  .foot .bad { color: var(--oxide); }
+
+  /* Search results slide over the floor */
+  .drawer { position: fixed; z-index: 4; top: 0; right: 0; bottom: 0; width: min(880px, 100vw); background: var(--wax-raised);
+            border-left: 1px solid var(--groove-firm); overflow: auto; padding: 16px 20px 32px; }
+  .drawer[hidden] { display: none; }
+  .drawer-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .drawer-head h2 { margin: 0; font: 600 18px/1.2 var(--type-label); text-transform: uppercase; letter-spacing: .01em; }
+
+  @media (max-width: 1040px) {
+    main { grid-template-columns: minmax(0, 1fr); }
+    .rail { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--groove); padding: 0 16px 24px; }
+    .deck { grid-template-columns: auto minmax(0, 1fr); padding: 10px 16px; }
+    .deck-side { grid-column: 1 / -1; justify-content: space-between; }
+    .floor { padding: 0 16px 32px; }
+  }
+  @media (max-width: 640px) {
+    .deck-rate .value { font-size: 26px; }
+    .deck { grid-template-columns: minmax(0, 1fr); }
+    .trace { height: 28px; }
+    .haul-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .haul-who, .haul-count { display: none; }
+    .haul-actions { grid-column: 1 / -1; }
+    .hide-small { display: none; }
+    .name-cell { width: auto; max-width: 180px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>Nicotine+ MCP</h1>
-  <span id="status" class="pill"><span class="dot"></span><span>connecting…</span></span>
-  <span id="folder" class="muted"></span>
-  <span class="spacer"></span>
-  <span id="updated" class="muted">updating…</span>
-  <button id="pause" class="btn" type="button">Pause refresh</button>
+<header class="deck">
+  <div class="deck-rate" id="rate" aria-live="off"><span class="value">0</span><span class="unit">KB/s</span></div>
+  <svg class="trace" id="trace" viewBox="0 0 300 40" preserveAspectRatio="none" role="img" aria-label="Download speed over the last few minutes"></svg>
+  <div class="deck-side">
+    <div class="tally" id="tally"></div>
+    <div class="lamp" id="lamp"><i></i><div><strong>connecting…</strong><small></small></div></div>
+  </div>
 </header>
+
 <main>
-  <div class="tiles">
-    <div class="tile"><div class="label">Active</div><div class="value" id="t-active">–</div></div>
-    <div class="tile"><div class="label">Queued</div><div class="value" id="t-queued">–</div></div>
-    <div class="tile"><div class="label">Failed</div><div class="value" id="t-failed">–</div></div>
-    <div class="tile"><div class="label">Finished</div><div class="value" id="t-finished">–</div></div>
-    <div class="tile"><div class="label">Speed</div><div class="value" id="t-speed">–</div></div>
+  <div class="floor">
+    <div class="part-head"><h2>Crates</h2></div>
+    <div id="crates"></div>
+
+    <div class="part-head">
+      <h2>On the way</h2>
+      <div class="switch" id="filters" role="group" aria-label="Filter downloads"></div>
+      <span class="spacer"></span>
+      <button class="act" type="button" data-do="clear-finished">Clear finished</button>
+    </div>
+    <div id="hauls"></div>
   </div>
 
-  <section>
-    <div class="head">
-      <h2>Downloads</h2>
-      <div class="tabs" id="filters"></div>
-      <span class="spacer"></span>
-      <button class="btn" type="button" data-action="clear-finished">Clear finished</button>
-    </div>
-    <div id="downloads"></div>
-  </section>
+  <aside class="rail">
+    <div class="part-head"><h2>Fastest uploaders</h2></div>
+    <div id="board"></div>
 
-  <section>
-    <div class="head">
-      <h2>Searches</h2>
-      <span class="muted">click a search to see its ranked results</span>
-    </div>
-    <div id="searches"></div>
-    <div id="results" class="results" hidden></div>
-  </section>
+    <div class="part-head"><h2>Searches</h2></div>
+    <div class="queries" id="queries"></div>
 
-  <section>
-    <div class="head"><h2>Log</h2></div>
-    <pre class="log" id="log"></pre>
-  </section>
+    <div class="part-head"><h2>Log</h2></div>
+    <pre class="log" id="log" tabindex="0"></pre>
+
+    <div class="foot"><span id="updated">updating…</span><span class="spacer"></span><button class="act" id="hold" type="button">Hold</button></div>
+  </aside>
 </main>
+
+<aside class="drawer" id="drawer" hidden aria-label="Search results"></aside>
+<div class="card" id="card" hidden></div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
+
+  // Everything shared by peers is untrusted: it all goes through this on its way to the page
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
     {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
   const FILTERS = ["all", "active", "queued", "paused", "failed", "finished"];
-  const state = { filter: "all", paused: false, selectedSearch: null, group: "track", lastUpdate: null, data: null };
+  const LOOKS = {
+    pending: "unheard", sourced: "found", downloading: "moving", finished: "yours", owned: "owned",
+    partial: "missing", not_found: "missing", failed: "lost", not_on_label: "gone", cancelled: "gone"
+  };
+  const WORDS = {
+    pending: "to search", sourced: "available", downloading: "downloading", finished: "in the crate", owned: "already yours",
+    partial: "incomplete copies", not_found: "not found", failed: "failed", not_on_label: "not on this label", cancelled: "cancelled"
+  };
+  const LEGEND = ["finished", "owned", "downloading", "sourced", "partial", "not_found", "failed", "pending", "not_on_label", "cancelled"];
+  const HISTORY = 90;
+
+  const view = {
+    filter: "all", held: false, data: null, history: [], openJob: null, jobFilter: "all", jobData: null, pickedTitle: null,
+    openHauls: new Set(), search: null, group: "album", shelves: {}
+  };
+
+  // Rewriting the same HTML would lose hover and focus every two seconds
+  const painted = new Map();
+  function paint(element, html) {
+    if (painted.get(element) === html) return;
+    painted.set(element, html);
+    element.innerHTML = html;
+  }
+
+  function splitRate(bytes) {
+    if (bytes >= 1e6) return [(bytes / 1e6).toFixed(bytes >= 1e7 ? 0 : 1), "MB/s"];
+    return [Math.round(bytes / 1e3), "KB/s"];
+  }
+  const showRate = (bytes) => splitRate(bytes).join(" ");
+
+  function showSize(bytes) {
+    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+    if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+    return `${Math.round(bytes / 1e3)} KB`;
+  }
+
+  function showTime(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  }
 
   async function api(path, body) {
     const options = body === undefined ? {} : {
@@ -141,194 +328,459 @@
     return data;
   }
 
-  function renderStatus(data) {
+  // The meter //
+
+  function renderDeck(data) {
     const status = data.status;
-    const pill = $("status");
-    pill.className = "pill " + (status.connected ? "online" : "offline");
-    pill.lastElementChild.textContent = status.connected
-      ? `${status.status} as ${status.username}`
-      : (status.needs_credentials ? "offline – no account configured" : "offline");
-    $("folder").textContent = status.download_folder || "";
+    const speed = data.download_speed_bytes || 0;
+    view.history.push(speed);
+    if (view.history.length > HISTORY) view.history.shift();
+
+    const [value, unit] = splitRate(speed);
+    const rate = $("rate");
+    rate.classList.toggle("moving", speed > 0);
+    rate.children[0].textContent = value;
+    rate.children[1].textContent = unit;
+
+    const peak = Math.max(...view.history, 1);
+    const step = 300 / (HISTORY - 1);
+    const offset = (HISTORY - view.history.length) * step;
+    const points = view.history.map((item, index) => `${(offset + index * step).toFixed(1)} ${(39 - item / peak * 36).toFixed(1)}`);
+    const trace = points.length > 1 ? `M${points.join("L")}` : "";
+    const area = points.length > 1 ? `${trace}L300 40L${offset.toFixed(1)} 40Z` : "";
+    $("trace").innerHTML = `<line x1="0" y1="39.5" x2="300" y2="39.5"></line><path class="area" d="${area}"></path><path d="${trace}"></path>`;
+
     const counts = status.downloads;
-    $("t-active").textContent = counts.active;
-    $("t-queued").textContent = counts.queued;
-    $("t-failed").textContent = counts.failed;
-    $("t-finished").textContent = counts.finished;
-    $("t-speed").textContent = data.download_speed || "–";
+    const tally = [["active", "Active"], ["queued", "Queued"], ["failed", "Failed"], ["finished", "Done"]];
+    paint($("tally"), tally.map(([key, label]) => (
+      `<div class="${key === "failed" && counts[key] ? "bad" : ""}"><span class="label">${label}</span><b>${counts[key]}</b></div>`
+    )).join(""));
+
+    const lamp = $("lamp");
+    lamp.classList.toggle("on", status.connected);
+    const name = status.connected ? status.username : (status.needs_credentials ? "no account configured" : "offline");
+    paint(lamp.lastElementChild, `<strong class="ellipsis">${esc(name)}</strong>` +
+      `<small class="ellipsis" title="${esc(status.download_folder)}">${esc(status.download_folder)}</small>`);
   }
 
-  function renderFilters(downloads) {
-    $("filters").innerHTML = FILTERS.map((name) => {
-      const count = name === "all" ? downloads.length : downloads.filter((d) => d.state === name).length;
-      return `<button type="button" data-filter="${name}" class="${name === state.filter ? "active" : ""}">` +
-             `${name} (${count})</button>`;
-    }).join("");
+  // Crates //
+
+  function thickness(item) {
+    return Math.min(14, Math.max(4, 3 + (item.track_count || 2) * 0.8));
   }
 
-  function actionButtons(d) {
-    const key = `data-user="${esc(d.username)}" data-path="${esc(d.virtual_path)}"`;
+  function sortedShelf(job) {
+    return [...(job.shelf || [])].sort((a, b) => (
+      (a.year || 9999) - (b.year || 9999) || String(a.catalog_number || "").localeCompare(String(b.catalog_number || ""), undefined, {numeric: true})
+    ));
+  }
+
+  function jobActions(job) {
+    const act = (name, label, kind = "") =>
+      `<button class="act ${kind}" type="button" data-job-do="${name}" data-job="${esc(job.job_id)}">${label}</button>`;
     const buttons = [];
-    if (d.state === "active" || d.state === "queued") {
-      buttons.push(`<button class="btn" type="button" data-action="pause" ${key}>Pause</button>`);
+    const c = job.counts;
+    if (job.mode === "preview" && job.status !== "cancelled" && job.num_available) {
+      buttons.push(act("start-downloads", `Download ${job.num_available}`, "go"));
+      const isFlacJob = (job.formats || []).join() === "flac";
+      if (!isFlacJob) buttons.push(`<button class="act go" type="button" data-job-do="start-downloads" data-flac="1" data-job="${esc(job.job_id)}" title="Strictly FLAC. ${job.num_available_flac} have a FLAC copy already, the others are searched for again.">FLAC only (${job.num_available_flac}+)</button>`);
     }
-    if (d.state === "paused" || d.state === "failed") {
-      buttons.push(`<button class="btn" type="button" data-action="retry" ${key}>Retry</button>`);
-    }
-    buttons.push(`<button class="btn danger" type="button" data-action="remove" ${key}>Remove</button>`);
+    if (job.status === "running" || job.status === "waiting_retry") buttons.push(act("pause", "Pause"));
+    if (job.status === "paused") buttons.push(act("resume", "Resume"));
+    if (c.not_found || c.partial) buttons.push(act("retry-missing", "Search again"));
+    if (job.status === "running" || job.status === "paused" || job.status === "waiting_retry") buttons.push(act("cancel", "Cancel", "stop"));
+    else buttons.push(act("remove", "Remove", "stop"));
     return buttons.join("");
   }
 
-  function renderDownloads(downloads) {
-    const rows = downloads.filter((d) => state.filter === "all" || d.state === state.filter);
-    if (!rows.length) {
-      $("downloads").innerHTML = `<div class="empty">No ${state.filter === "all" ? "" : state.filter + " "}downloads.</div>`;
-      return;
-    }
-    $("downloads").innerHTML = `<table><thead><tr>
-      <th>File</th><th>User</th><th>Status</th><th>Progress</th><th class="num">Size</th>
-      <th class="num">Speed</th><th class="num">ETA / Queue</th><th></th></tr></thead><tbody>` +
-      rows.map((d) => {
-        const folder = d.virtual_path.slice(0, d.virtual_path.length - d.basename.length);
-        const eta = d.state === "active" && d.time_left_seconds ? fmtDuration(d.time_left_seconds)
-          : (d.state === "queued" && d.queue_position ? `#${d.queue_position} in queue` : "");
-        const status = d.state === "failed" ? `${esc(d.status)}${d.will_retry ? " (retrying)" : ""}` : esc(d.status);
-        return `<tr>
-          <td class="file"><div class="name" title="${esc(d.virtual_path)}">${esc(d.basename)}</div>` +
-          `<div class="folder" title="${esc(d.local_path || d.download_folder)}">${esc(folder)}</div></td>
-          <td>${esc(d.username)}</td>
-          <td><span class="badge ${d.state}">${status}</span></td>
-          <td><div class="progress"><div class="bar ${d.state}"><div style="width:${d.progress_percent}%"></div></div>` +
-          `<span>${d.progress_percent.toFixed(0)}%</span></div></td>
-          <td class="num">${esc(d.size)}</td>
-          <td class="num">${esc(d.speed || "")}</td>
-          <td class="num">${eta}</td>
-          <td class="actions">${actionButtons(d)}</td></tr>`;
-      }).join("") + "</tbody></table>";
+  function crateState(job) {
+    if (job.blocked_reason) return ["blocked", job.blocked_reason];
+    const left = job.num_remaining_to_search;
+    if (job.status === "running" && job.mode === "preview") return ["running", `looking for it, ${left} left to search`];
+    if (job.status === "running") return ["running", left ? `collecting, ${left} left to search` : "collecting"];
+    if (job.status === "previewed") return ["", "preview finished, nothing downloaded"];
+    if (job.status === "waiting_retry") return ["", `searching again ${new Date(job.next_retry_at * 1000).toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"})}`];
+    return ["", job.status];
   }
 
-  function renderSearches(searches) {
+  function renderCrates(jobs) {
+    if (!jobs.length) {
+      paint($("crates"), `<div class="empty">No crates yet. Ask your agent to collect a label or an artist's discography, and it shows up here as a shelf of records.</div>`);
+      return;
+    }
+    view.shelves = {};
+    const before = painted.get($("crates"));
+    paint($("crates"), jobs.map((job) => {
+      const shelf = sortedShelf(job);
+      view.shelves[job.job_id] = shelf;
+      const [stateClass, stateText] = crateState(job);
+      const spines = shelf.map((item, index) => {
+        const look = LOOKS[item.state] || "unheard";
+        const fill = look === "moving" ? `;--fill:${item.progress_percent}%` : "";
+        const picked = job.job_id === view.openJob && view.pickedTitle === item.title ? " picked" : "";
+        return `<button class="spine ${look}${picked}" type="button" style="--thick:${thickness(item).toFixed(0)}px${fill}" ` +
+               `data-job-open="${esc(job.job_id)}" data-spine="${index}" aria-label="${esc(item.artist)} – ${esc(item.title)}: ${esc(WORDS[item.state])}"></button>`;
+      }).join("");
+      const legend = LEGEND.filter((state) => job.counts[state]).map((state) => (
+        `<span><i class="${LOOKS[state]}"></i><b>${job.counts[state]}</b> ${esc(WORDS[state])}</span>`
+      )).join("");
+      return `<article class="crate">
+        <div class="crate-head">
+          <button class="name" type="button" data-job-open="${esc(job.job_id)}" aria-expanded="${job.job_id === view.openJob}"><h3>${esc(job.name)}</h3></button>
+          <span class="crate-state">${job.num_releases < job.num_in_catalog ? `only ${job.num_releases} of ${job.num_in_catalog} releases` : `${job.num_releases} releases`}</span>
+          ${job.artist_id ? `<span class="crate-state">artist</span>` : ""}
+          ${(job.formats || []).join() === "flac" ? `<span class="crate-state">FLAC only</span>` : ""}
+          <span class="crate-state ${stateClass}">${esc(stateText)}</span>
+          <div class="crate-actions">${jobActions(job)}</div>
+        </div>
+        <div class="shelf">${spines}</div>
+        <div class="legend">${legend}</div>
+        <div class="crate-sheet" data-sheet="${esc(job.job_id)}"></div>
+      </article>`;
+    }).join(""));
+    if (before !== painted.get($("crates"))) renderOpenCrate();
+  }
+
+  function renderOpenCrate() {
+    document.querySelectorAll("[data-sheet]").forEach((box) => {
+      if (box.dataset.sheet !== view.openJob || !view.jobData) { box.innerHTML = ""; delete box.dataset.painted; return; }
+      const job = view.jobData;
+      const names = ["all", ...LEGEND.filter((state) => job.counts[state])];
+      const tabs = names.map((name) => {
+        const count = name === "all" ? job.num_releases : job.counts[name];
+        return `<button type="button" data-job-filter="${name}" aria-pressed="${name === view.jobFilter}">${esc(name === "all" ? "everything" : WORDS[name])}<b>${count}</b></button>`;
+      }).join("");
+      const rows = job.releases.filter((item) => view.jobFilter === "all" || item.state === view.jobFilter);
+      const body = rows.map((item) => {
+        let detail = item.note || "";
+        if (item.state === "downloading" && !item.is_queued) detail = `${item.num_files_finished}/${item.num_files} files · ${item.progress_percent}%${item.speed_bytes ? ` · ${showRate(item.speed_bytes)}` : ""}`;
+        else if (item.state === "partial" && item.best_partial_copy) detail = `best copy has ${item.best_partial_copy.num_matched} of ${item.best_partial_copy.num_expected} tracks`;
+        else if (item.local_path) detail = item.local_path;
+        const look = LOOKS[item.state] || "";
+        return `<tr class="${view.pickedTitle === item.title ? "picked" : ""}">
+          <td class="cat hide-small">${esc((item.catalog_numbers || [])[0] || "")}</td>
+          <td class="name-cell"><strong class="ellipsis" title="${esc(item.title)}">${esc(item.title)}</strong><small class="ellipsis">${esc(item.artist)}</small></td>
+          <td class="n hide-small">${esc(item.year || "")}</td>
+          <td class="word hide-small">${esc(item.kind)}</td>
+          <td class="n hide-small">${item.track_count || ""}</td>
+          <td><span class="word ${look}">${esc(WORDS[item.state])}</span>${item.uploader ? ` <span class="who">${esc(item.uploader)}</span>` : ""}<span class="note ellipsis" title="${esc(detail)}">${esc(detail)}</span></td>
+        </tr>`;
+      }).join("");
+      const html = `<div class="switch" role="group" aria-label="Filter releases">${tabs}</div>
+        <table class="sheet"><thead><tr><th class="hide-small">Cat. no.</th><th>Release</th><th class="n hide-small">Year</th><th class="hide-small">Kind</th>
+        <th class="n hide-small">Tracks</th><th>Status</th></tr></thead><tbody>${body || `<tr><td colspan="6" class="quiet">Nothing here.</td></tr>`}</tbody></table>`;
+      if (box.dataset.painted !== html) { box.innerHTML = html; box.dataset.painted = html; }
+    });
+  }
+
+  async function loadOpenCrate() {
+    if (view.openJob === null) return;
+    try {
+      view.jobData = await api(`/api/jobs/${encodeURIComponent(view.openJob)}?limit=2000`);
+      renderOpenCrate();
+    } catch (error) {
+      view.openJob = null;
+      view.jobData = null;
+    }
+  }
+
+  // Transfers, by album //
+
+  function folderOf(download) {
+    return download.virtual_path.slice(0, download.virtual_path.length - download.basename.length - 1);
+  }
+
+  function buildHauls(downloads) {
+    const hauls = new Map();
+    for (const download of downloads) {
+      const folder = folderOf(download);
+      const key = `${download.username}\n${folder}`;
+      if (!hauls.has(key)) {
+        hauls.set(key, {key, username: download.username, folder, name: folder.split("\\").pop() || folder, files: [], bytes: 0, size: 0, speed: 0, counts: {}, position: 0});
+      }
+      const haul = hauls.get(key);
+      haul.files.push(download);
+      haul.bytes += download.state === "finished" ? download.size_bytes : download.bytes_transferred;
+      haul.size += download.size_bytes;
+      haul.speed += download.state === "active" ? download.speed_bytes : 0;
+      haul.counts[download.state] = (haul.counts[download.state] || 0) + 1;
+      if (download.state === "queued" && download.queue_position) haul.position = download.queue_position;
+    }
+    const order = (haul) => (haul.counts.active ? 0 : haul.counts.queued ? 1 : haul.counts.paused ? 2 : haul.counts.failed ? 3 : 4);
+    return [...hauls.values()].sort((a, b) => order(a) - order(b));
+  }
+
+  function haulButton(name, label, haul, kind = "") {
+    return `<button class="act ${kind}" type="button" data-haul-do="${name}" data-haul="${esc(haul.key)}">${label}</button>`;
+  }
+
+  function fileButton(name, label, file, kind = "") {
+    return `<button class="act ${kind}" type="button" data-file-do="${name}" data-user="${esc(file.username)}" data-path="${esc(file.virtual_path)}">${label}</button>`;
+  }
+
+  function renderHauls(downloads) {
+    const counts = {all: downloads.length};
+    for (const download of downloads) counts[download.state] = (counts[download.state] || 0) + 1;
+    paint($("filters"), FILTERS.filter((name) => name === "all" || counts[name]).map((name) => (
+      `<button type="button" data-filter="${name}" aria-pressed="${name === view.filter}">${name}<b>${counts[name] || 0}</b></button>`
+    )).join(""));
+
+    const shown = downloads.filter((download) => view.filter === "all" || download.state === view.filter);
+    if (!shown.length) {
+      paint($("hauls"), `<div class="empty">Nothing on the way${view.filter === "all" ? "." : ` that is ${esc(view.filter)}.`}</div>`);
+      return;
+    }
+
+    paint($("hauls"), buildHauls(shown).map((haul) => {
+      const numFinished = haul.counts.finished || 0;
+      const isDone = numFinished === haul.files.length;
+      const percent = haul.size ? Math.min(100, haul.bytes / haul.size * 100) : (isDone ? 100 : 0);
+      const isOpen = view.openHauls.has(haul.key);
+      let rate = "";
+      if (haul.speed) rate = showRate(haul.speed);
+      else if (haul.counts.failed && !haul.counts.queued && !haul.counts.active) rate = "failed";
+      else if (haul.position) rate = `#${haul.position}`;
+      else if (haul.counts.queued) rate = "queued";
+      else if (haul.counts.paused) rate = "paused";
+      const buttons = [];
+      if (haul.counts.active || haul.counts.queued) buttons.push(haulButton("pause", "Pause", haul));
+      if (haul.counts.paused || haul.counts.failed) buttons.push(haulButton("retry", "Retry", haul));
+      buttons.push(haulButton("remove", "Remove", haul, "stop"));
+
+      const files = !isOpen ? "" : `<table class="sheet"><thead><tr><th>File</th><th>Status</th><th class="n">Size</th><th class="n">Progress</th><th class="n">Rate</th><th></th></tr></thead><tbody>` +
+        haul.files.map((file) => {
+          const left = file.state === "active" && file.time_left_seconds ? showTime(file.time_left_seconds) : (file.queue_position ? `#${file.queue_position}` : "");
+          const actions = [];
+          if (file.state === "active" || file.state === "queued") actions.push(fileButton("pause", "Pause", file));
+          if (file.state === "paused" || file.state === "failed") actions.push(fileButton("retry", "Retry", file));
+          actions.push(fileButton("remove", "Remove", file, "stop"));
+          return `<tr><td class="name-cell"><span class="ellipsis" style="display:block" title="${esc(file.local_path || file.basename)}">${esc(file.basename)}</span></td>
+            <td><span class="word ${esc(file.state)}">${esc(file.status)}${file.will_retry ? " (will retry)" : ""}</span></td>
+            <td class="n">${esc(file.size)}</td><td class="n">${file.progress_percent.toFixed(0)}%</td>
+            <td class="n">${esc(file.speed || left)}</td><td class="n">${actions.join(" ")}</td></tr>`;
+        }).join("") + "</tbody></table>";
+
+      return `<div class="haul">
+        <div class="haul-row" data-haul-open="${esc(haul.key)}" aria-expanded="${isOpen}">
+          <div style="min-width:0"><strong class="ellipsis" title="${esc(haul.folder)}">${esc(haul.name)}</strong><small class="ellipsis">${showSize(haul.bytes)} of ${showSize(haul.size)}</small></div>
+          <div class="haul-who ellipsis" title="${esc(haul.username)}">${esc(haul.username)}</div>
+          <div class="haul-count">${numFinished}/${haul.files.length} files</div>
+          <div class="haul-rate ${haul.speed ? "moving" : ""}">${esc(rate)}</div>
+          <div class="haul-actions">${buttons.join("")}</div>
+          <div class="level ${isDone ? "done" : ""}"><div style="width:${percent.toFixed(1)}%"></div></div>
+        </div>${files}
+      </div>`;
+    }).join(""));
+  }
+
+  // Rail //
+
+  function renderBoard(data) {
+    const fastest = data.fastest_uploaders || [];
+    if (!fastest.length) {
+      paint($("board"), `<div class="empty" style="padding:4px 0">No measurements yet. Speeds appear once something is transferring.</div>`);
+      return;
+    }
+    const low = 50e3;
+    const high = Math.max(fastest[0].speed_bytes, 5e6);
+    const reach = (speed) => Math.max(2, Math.log(Math.max(speed, low) / low) / Math.log(high / low) * 100);
+    paint($("board"), `<div class="board">` + fastest.map((item) => (
+      `<div style="--reach:${reach(item.speed_bytes).toFixed(0)}%"><span class="ellipsis" title="${esc(item.username)}">${esc(item.username)}</span><span class="rate">${esc(showRate(item.speed_bytes))}</span><i></i></div>`
+    )).join("") + `</div><p class="board-note">Real speeds, from ${data.num_uploaders_measured} measured. What uploaders claim isn't used.</p>`);
+  }
+
+  function renderQueries(searches) {
     if (!searches.length) {
-      $("searches").innerHTML = `<div class="empty">No searches yet. Searches started by the agent show up here.</div>`;
+      paint($("queries"), `<div class="empty" style="padding:4px 0">No searches yet.</div>`);
       return;
     }
-    $("searches").innerHTML = `<table class="searches"><thead><tr>
-      <th>Query</th><th>Mode</th><th class="num">Users</th><th class="num">Files</th><th>Formats</th>
-      <th class="num">Age</th><th></th></tr></thead><tbody>` +
-      searches.map((s) => {
-        const formats = Object.entries(s.formats || {}).map(([k, v]) => `${k} ${v}`).join(", ");
-        return `<tr data-token="${s.token}" class="${s.token === state.selectedSearch ? "selected" : ""}">
-          <td>${esc(s.query)}${s.username ? ` <span class="muted">(${esc(s.username)})</span>` : ""}</td>
-          <td>${esc(s.mode)}</td><td class="num">${s.num_users_responded}</td><td class="num">${s.num_files}</td>
-          <td class="muted">${esc(formats)}</td><td class="num">${fmtDuration(s.elapsed_seconds)}</td>
-          <td class="actions">${s.is_active ? `<button class="btn" type="button" data-action="stop-search" ` +
-            `data-token="${s.token}">Stop</button>` : `<span class="muted">stopped</span>`}</td></tr>`;
-      }).join("") + "</tbody></table>";
+    paint($("queries"), searches.slice(0, 12).map((search) => (
+      `<button type="button" data-search="${search.token}" class="${search.token === view.search ? "picked" : ""}">` +
+      `<span class="ellipsis ${search.is_active ? "live" : ""}" title="${esc(search.query)}">${esc(search.query)}</span><b>${search.num_files}</b></button>`
+    )).join(""));
   }
 
-  async function renderResults() {
-    const box = $("results");
-    if (state.selectedSearch === null) { box.hidden = true; return; }
-    box.hidden = false;
+  async function renderDrawer() {
+    const drawer = $("drawer");
+    if (view.search === null) { drawer.hidden = true; return; }
+    drawer.hidden = false;
     let data;
     try {
-      data = await api(`/api/search/${state.selectedSearch}?group=${state.group}&limit=15`);
+      data = await api(`/api/search/${view.search}?group=${view.group}&limit=25`);
     } catch (error) {
-      box.innerHTML = `<div class="empty error">${esc(error.message)}</div>`;
+      drawer.innerHTML = `<div class="drawer-head"><h2>Search</h2><span class="spacer"></span><button class="act" type="button" data-do="close-drawer">Close</button></div><p class="quiet">${esc(error.message)}</p>`;
       return;
     }
-    const head = `<div class="head"><strong>Top results for “${esc(data.search.query)}”</strong>
-      <div class="tabs"><button type="button" data-group="track" class="${state.group === "track" ? "active" : ""}">Tracks</button>
-      <button type="button" data-group="album" class="${state.group === "album" ? "active" : ""}">Albums</button></div>
-      <span class="spacer"></span><button class="btn" type="button" data-action="close-results">Close</button></div>`;
-    const items = state.group === "album" ? data.albums : data.tracks;
-    if (!items.length) { box.innerHTML = head + `<div class="empty">No matching results.</div>`; return; }
-    box.innerHTML = head + `<table><thead><tr><th class="num">Score</th><th>User</th>
-      <th>${state.group === "album" ? "Folder" : "File"}</th><th>Quality</th><th class="num">Size</th>
-      <th>Slot / queue</th><th class="num">Upload speed</th></tr></thead><tbody>` +
-      items.map((r) => `<tr>
-        <td class="num">${r.score}</td><td>${esc(r.username)}${r.country_code ? ` <span class="muted">${esc(r.country_code)}</span>` : ""}</td>
-        <td class="file"><div class="name" title="${esc(r.virtual_path || r.folder_path)}">${esc(state.group === "album" ? r.folder_name : r.basename)}</div>
-          <div class="folder">${esc(state.group === "album" ? `${r.num_audio_files} audio files, ${r.formats.join("/")}` : r.folder_path)}</div></td>
-        <td>${esc(state.group === "album" ? r.formats.join(", ") : r.quality)}</td>
-        <td class="num">${esc(r.total_size || r.size)}</td>
-        <td>${r.has_free_slot ? '<span class="badge finished">free slot</span>' : `<span class="badge queued">${r.queue_length} queued</span>`}</td>
-        <td class="num">${esc(r.upload_speed || "")}</td></tr>`).join("") + "</tbody></table>";
+    const isAlbum = view.group === "album";
+    const items = isAlbum ? data.albums : data.tracks;
+    const stop = data.search.is_active ? `<button class="act" type="button" data-do="stop-search">Stop</button>` : "";
+    const rows = items.map((item) => `<tr>
+      <td class="n">${item.score}</td>
+      <td class="name-cell"><strong class="ellipsis" title="${esc(item.virtual_path || item.folder_path)}">${esc(isAlbum ? item.folder_name : item.basename)}</strong>
+        <small class="ellipsis" title="${esc(item.folder_path)}">${esc(isAlbum ? `${item.num_audio_files} audio files` : item.folder_path)}</small></td>
+      <td class="who">${esc(item.username)}</td>
+      <td class="word">${esc(isAlbum ? item.formats.join(" ") : item.quality)}</td>
+      <td class="n">${esc(item.total_size || item.size)}</td>
+      <td class="word">${item.has_free_slot ? "free slot" : `${item.queue_length} queued`}</td>
+      <td class="n">${item.measured_speed ? esc(item.measured_speed) : `<span class="quiet">unmeasured</span>`}</td></tr>`).join("");
+    drawer.innerHTML = `<div class="drawer-head"><h2>${esc(data.search.query)}</h2>
+        <span class="crate-state">${data.search.num_users_responded} users · ${data.search.num_files} files</span>
+        <div class="switch"><button type="button" data-group="album" aria-pressed="${isAlbum}">Albums</button><button type="button" data-group="track" aria-pressed="${!isAlbum}">Tracks</button></div>
+        <span class="spacer"></span>${stop}<button class="act" type="button" data-do="close-drawer">Close</button></div>` +
+      (rows ? `<table class="sheet"><thead><tr><th class="n">Score</th><th>${isAlbum ? "Folder" : "File"}</th><th>Uploader</th><th>Quality</th><th class="n">Size</th><th>Slot</th><th class="n">Real speed</th></tr></thead><tbody>${rows}</tbody></table>`
+            : `<p class="quiet">No matching results.</p>`);
   }
 
-  function fmtDuration(seconds) {
-    seconds = Math.max(0, Math.round(seconds));
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  // Spine hover card //
+
+  function showCard(spine) {
+    const shelf = view.shelves[spine.dataset.jobOpen];
+    const item = shelf && shelf[Number(spine.dataset.spine)];
+    if (!item) return;
+    const card = $("card");
+    const facts = [item.catalog_number, item.year, item.kind, item.track_count ? `${item.track_count} tracks` : ""].filter(Boolean).join(" · ");
+    const status = item.is_queued ? "in queue" : item.state === "downloading" ? `${WORDS[item.state]} ${item.progress_percent}%` : WORDS[item.state];
+    card.innerHTML = `<strong>${esc(item.title)}</strong><span>${esc(item.artist)}</span><small>${esc(facts)}</small>` +
+      `<small>${esc(status)}${item.uploader ? ` · ${esc(item.uploader)}` : ""}</small>`;
+    card.hidden = false;
+    const box = spine.getBoundingClientRect();
+    const rect = card.getBoundingClientRect();
+    card.style.left = `${Math.max(8, Math.min(window.innerWidth - rect.width - 8, box.left + box.width / 2 - rect.width / 2))}px`;
+    card.style.top = `${box.top - rect.height - 8 > 70 ? box.top - rect.height - 8 : box.bottom + 8}px`;
   }
+
+  document.addEventListener("mouseover", (event) => {
+    const spine = event.target.closest && event.target.closest(".spine");
+    if (spine) showCard(spine); else $("card").hidden = true;
+  });
+  document.addEventListener("focusin", (event) => {
+    if (event.target.classList.contains("spine")) showCard(event.target); else $("card").hidden = true;
+  });
+
+  // The rest //
 
   function render(data) {
-    state.data = data;
-    renderStatus(data);
-    renderFilters(data.downloads);
-    renderDownloads(data.downloads);
-    renderSearches(data.searches);
-    $("log").textContent = (data.recent_log || []).join("\n");
-    if (data.searches.length && state.selectedSearch !== null &&
-        !data.searches.some((s) => s.token === state.selectedSearch)) {
-      state.selectedSearch = null;
-      renderResults();
-    }
+    view.data = data;
+    renderDeck(data);
+    renderCrates(data.jobs || []);
+    renderHauls(data.downloads);
+    renderBoard(data);
+    renderQueries(data.searches);
+    const log = $("log");
+    const isAtEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+    log.textContent = (data.recent_log || []).join("\n");
+    if (isAtEnd) log.scrollTop = log.scrollHeight;
   }
 
   async function refresh() {
-    if (state.paused) return;
+    if (view.held) return;
+    const updated = $("updated");
     try {
-      const data = await api("/api/state");
-      render(data);
-      state.lastUpdate = Date.now();
-      $("updated").textContent = "updated just now";
-      $("updated").classList.remove("error");
+      render(await api("/api/state"));
+      updated.textContent = "live";
+      updated.classList.remove("bad");
     } catch (error) {
-      $("updated").textContent = `update failed: ${error.message}`;
-      $("updated").classList.add("error");
+      updated.textContent = `update failed: ${error.message}`;
+      updated.classList.add("bad");
+    }
+  }
+
+  async function actOnFiles(files, action) {
+    for (const file of files) {
+      if (action === "retry") {
+        if (file.state === "paused" || file.state === "failed") await api("/api/downloads/retry", {username: file.username, virtual_path: file.virtual_path});
+      } else if (action === "remove") {
+        await api("/api/downloads/cancel", {username: file.username, virtual_path: file.virtual_path, remove: true});
+      } else if (file.state === "active" || file.state === "queued") {
+        await api("/api/downloads/cancel", {username: file.username, virtual_path: file.virtual_path, remove: false});
+      }
     }
   }
 
   document.addEventListener("click", async (event) => {
-    const el = event.target.closest("button, tr[data-token]");
+    const el = event.target.closest("button, [data-haul-open]");
     if (!el) return;
+    const data = el.dataset;
     try {
-      if (el.dataset.filter) { state.filter = el.dataset.filter; if (state.data) render(state.data); return; }
-      if (el.dataset.group) { state.group = el.dataset.group; await renderResults(); return; }
-      const action = el.dataset.action;
-      if (action === "pause") await api("/api/downloads/cancel", {username: el.dataset.user, virtual_path: el.dataset.path, remove: false});
-      else if (action === "remove") await api("/api/downloads/cancel", {username: el.dataset.user, virtual_path: el.dataset.path, remove: true});
-      else if (action === "retry") await api("/api/downloads/retry", {username: el.dataset.user, virtual_path: el.dataset.path});
-      else if (action === "clear-finished") await api("/api/downloads/clear-finished", {});
-      else if (action === "stop-search") { await api("/api/searches/stop", {token: Number(el.dataset.token)}); event.stopPropagation(); }
-      else if (action === "close-results") { state.selectedSearch = null; await renderResults(); return; }
-      else if (el.matches("tr[data-token]")) { state.selectedSearch = Number(el.dataset.token); await renderResults(); }
-      else return;
-      await refresh();
-      if (state.selectedSearch !== null && !el.matches("tr[data-token]")) await renderResults();
+      if (data.filter) { view.filter = data.filter; if (view.data) renderHauls(view.data.downloads); return; }
+      if (data.group) { view.group = data.group; await renderDrawer(); return; }
+      if (data.jobFilter) { view.jobFilter = data.jobFilter; view.pickedTitle = null; renderOpenCrate(); return; }
+
+      if (data.jobDo) {
+        if (data.jobDo === "cancel" && !confirm("Cancel this job and remove its unfinished downloads? Finished files stay.")) return;
+        if (data.jobDo === "remove" && !confirm("Remove this from the list? Its files stay on disk.")) return;
+        if (data.jobDo === "remove" && view.openJob === data.job) { view.openJob = null; view.jobData = null; }
+        await api(`/api/jobs/${data.jobDo}`, {job_id: data.job, flac_only: data.flac === "1"});
+        await refresh();
+        await loadOpenCrate();
+        return;
+      }
+
+      if (data.jobOpen) {
+        const spineItem = data.spine !== undefined ? (view.shelves[data.jobOpen] || [])[Number(data.spine)] : null;
+        if (spineItem) {
+          view.pickedTitle = spineItem.title;
+          view.openJob = data.jobOpen;
+        } else {
+          view.pickedTitle = null;
+          view.openJob = view.openJob === data.jobOpen ? null : data.jobOpen;
+        }
+        view.jobFilter = "all";
+        view.jobData = null;
+        if (view.data) renderCrates(view.data.jobs || []);
+        renderOpenCrate();
+        await loadOpenCrate();
+        if (spineItem) document.querySelector(".crate-sheet tr.picked")?.scrollIntoView({block: "center", behavior: "smooth"});
+        return;
+      }
+
+      if (data.fileDo) {
+        const file = view.data.downloads.find((item) => item.username === data.user && item.virtual_path === data.path);
+        if (file) await actOnFiles([file], data.fileDo);
+        await refresh();
+        return;
+      }
+
+      if (data.haulDo) {
+        const haul = buildHauls(view.data.downloads).find((item) => item.key === data.haul);
+        if (!haul) return;
+        if (data.haulDo === "remove" && !confirm(`Remove ${haul.files.length} downloads from the list?`)) return;
+        await actOnFiles(haul.files, data.haulDo);
+        await refresh();
+        return;
+      }
+
+      if (data.haulOpen !== undefined) {
+        if (view.openHauls.has(data.haulOpen)) view.openHauls.delete(data.haulOpen); else view.openHauls.add(data.haulOpen);
+        renderHauls(view.data.downloads);
+        return;
+      }
+
+      if (data.search) { view.search = Number(data.search); view.group = "album"; await renderDrawer(); renderQueries(view.data.searches); return; }
+      if (data.do === "close-drawer") { view.search = null; await renderDrawer(); renderQueries(view.data.searches); return; }
+      if (data.do === "clear-finished") { await api("/api/downloads/clear-finished", {}); await refresh(); return; }
+      if (data.do === "stop-search") { await api("/api/searches/stop", {token: view.search}); await renderDrawer(); await refresh(); }
     } catch (error) {
-      $("updated").textContent = `action failed: ${error.message}`;
-      $("updated").classList.add("error");
+      $("updated").textContent = `that didn't work: ${error.message}`;
+      $("updated").classList.add("bad");
     }
   });
 
-  $("pause").addEventListener("click", () => {
-    state.paused = !state.paused;
-    $("pause").textContent = state.paused ? "Resume refresh" : "Pause refresh";
-    if (!state.paused) refresh();
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && view.search !== null) { view.search = null; renderDrawer(); }
   });
 
-  setInterval(() => {
-    if (state.lastUpdate && !state.paused) {
-      const age = Math.round((Date.now() - state.lastUpdate) / 1000);
-      if (age >= 2 && !$("updated").classList.contains("error")) $("updated").textContent = `updated ${age}s ago`;
-    }
-  }, 1000);
+  $("hold").addEventListener("click", () => {
+    view.held = !view.held;
+    $("hold").textContent = view.held ? "Resume" : "Hold";
+    $("updated").textContent = view.held ? "held" : "live";
+    if (!view.held) refresh();
+  });
 
   refresh();
   setInterval(refresh, 2000);
-  setInterval(() => { if (state.selectedSearch !== null && !state.paused) renderResults(); }, 10000);
+  setInterval(() => { if (!view.held) loadOpenCrate(); }, 5000);
+  setInterval(() => { if (view.search !== null && !view.held) renderDrawer(); }, 10000);
 })();
 </script>
 </body>

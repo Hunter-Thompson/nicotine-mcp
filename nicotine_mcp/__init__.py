@@ -11,10 +11,16 @@ the human in the loop watch what is being searched and downloaded.
 Layers:
 
 - ``ranking``: pure scoring/ranking of search results, no Nicotine+ dependency
+- ``matching``: pure comparison of shared folders with catalog releases
+- ``catalog``: labels, releases and tracklists from MusicBrainz and Discogs
+- ``library``: finds out which releases are already on disk
 - ``automation``: glue around the Nicotine+ core (search collection, folder
   requests, download management), runs in the core's main loop thread
 - ``runner``: runs the Nicotine+ core in a background thread and marshals calls
-- ``server``: the MCP tools
+- ``sourcing``: finds the shared folders that really contain a release
+- ``speed``: measures uploaders, and races them to find the fastest
+- ``jobs``, ``job_models``: long running background jobs, such as collecting a whole label
+- ``server``, ``collection_tools``, ``tool_params``: the MCP tools
 - ``web``: the local dashboard
 - ``cli``: command line entry point
 """

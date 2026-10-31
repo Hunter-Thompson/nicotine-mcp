@@ -76,6 +76,16 @@ class ReleaseSourcer:
             return release
 
         details = await anyio.to_thread.run_sync(self.catalog.release_details, release.release_id)
+
+        if not release.title:
+            # Only its ID was known, as in a job started from a list of release IDs
+            release.title = details.title
+            release.artist = details.artist
+            release.primary_artist = details.primary_artist
+            release.year = details.year
+            release.kind = details.kind
+            release.formats = details.formats
+
         release.tracks = details.tracks
         release.track_count = len(details.tracks) or release.track_count
         release.label_ids = details.label_ids or release.label_ids

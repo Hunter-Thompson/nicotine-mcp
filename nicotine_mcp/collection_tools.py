@@ -11,8 +11,11 @@ from typing import Literal
 
 from nicotine_mcp.catalog import CatalogError
 from nicotine_mcp.catalog import DISCOGS
+from nicotine_mcp.catalog import SOURCES
 from nicotine_mcp.job_models import PauseMode
 from nicotine_mcp.matching import assess_album_folder
+from nicotine_mcp.matching import normalize_text
+from nicotine_mcp.matching import Release
 from nicotine_mcp.mcp_compat import ToolError
 from nicotine_mcp.mcp_compat import anyio
 from nicotine_mcp.portable import export_running
@@ -34,6 +37,7 @@ from nicotine_mcp.tool_params import IncludeAppearances
 from nicotine_mcp.tool_params import JobDownloadFolder
 from nicotine_mcp.tool_params import JobId
 from nicotine_mcp.tool_params import JobMode
+from nicotine_mcp.tool_params import JobName
 from nicotine_mcp.tool_params import Kinds
 from nicotine_mcp.tool_params import LabelId
 from nicotine_mcp.tool_params import Limit
@@ -45,6 +49,8 @@ from nicotine_mcp.tool_params import MinSpeedKbps
 from nicotine_mcp.tool_params import Prefer
 from nicotine_mcp.tool_params import ReleaseId
 from nicotine_mcp.tool_params import ReleaseInJob
+from nicotine_mcp.tool_params import ReleaseRef
+from nicotine_mcp.tool_params import ReleaseRefs
 from nicotine_mcp.tool_params import RetryMissingHours
 from nicotine_mcp.tool_params import Sample
 from nicotine_mcp.tool_params import SearchIntervalSeconds
@@ -209,6 +215,23 @@ def register_collection_tools(tool, runner, preferences, run_search):
         """
 
         return {"albums": await catalog_call(runner.catalog.find_track_albums, artist, title)}
+
+    @tool()
+    async def find_album(
+        artist: described(str, "Artist credited on the album, or 'Various Artists' for a compilation."),
+        title: described(str, "Title of the album.")
+    ) -> dict:
+        """Looks an album up by artist and title in the catalogs, the closest match first, with
+        editions merged and what is on disk marked. Doesn't search Soulseek, and is safe to call
+        freely. Pass a release_id to download_release, or collect several with start_release_job.
+        """
+
+        found = await catalog_call(runner.catalog.find_albums, artist, title)
+        listing = {"releases": found["albums"]}
+        await describe_listing(listing, 10)
+
+        return {"albums": listing["releases"], "num_owned": listing["num_owned"],
+                "library_folders_unavailable": listing["library_folders_unavailable"], "warnings": found["warnings"]}
 
     @tool()
     async def download_album_for_track(
@@ -434,6 +457,77 @@ def register_collection_tools(tool, runner, preferences, run_search):
             job["note"] = (f"This job only covers {job['num_releases']} of the {listing['num_releases']} releases "
                            f"in the catalog. Tell the user, so it isn't mistaken for all of them.")
 
+        return job
+
+    @tool()
+    async def start_release_job(
+        name: JobName,
+        releases: ReleaseRefs,
+        mode: JobMode = "preview",
+        flac_only: FlacOnly = False,
+        formats: Formats = None,
+        prefer: Prefer = "balanced",
+        min_bitrate: MinBitrate = 0,
+        download_folder: JobDownloadFolder = None,
+        audio_only: AudioOnly = False,
+        skip_owned: SkipOwned = True,
+        accept_partial: AcceptPartial = False,
+        max_active_releases: MaxActiveReleases = 3,
+        max_per_uploader: MaxPerUploader = 1,
+        start_timeout_seconds: StartTimeoutSeconds = 900,
+        min_speed_kbps: MinSpeedKbps = 300,
+        retry_missing_hours: RetryMissingHours = 24,
+        search_interval_seconds: SearchIntervalSeconds = 10
+    ) -> dict:
+        """Starts a background job that collects a list of releases, such as the albums of a
+        playlist: skips those on disk, searches for the rest, and accepts only folders that match
+        the tracklists. A release listed twice is collected once. Get the IDs from find_album,
+        find_track_albums or a catalog listing.
+
+        Returns immediately, check on it with get_job. Run a preview first and tell the user what
+        it found, then use start_job_downloads, unless they explicitly asked to download right away.
+        """
+
+        items = []
+        seen = set()
+
+        for ref in releases:
+            if isinstance(ref, dict):
+                ref = ReleaseRef.model_validate(ref)
+
+            release_id = ref.release_id.strip()
+            source, _separator, identifier = release_id.partition(":")
+
+            if source not in SOURCES or not identifier:
+                raise ToolError(f"Invalid release ID '{release_id}', expected one starting with musicbrainz: or "
+                                f"discogs: as returned by find_album")
+
+            title = ref.title.strip()
+            keys = {release_id, (normalize_text(ref.artist), normalize_text(title))} if title else {release_id}
+
+            if keys & seen:
+                continue
+
+            seen.update(keys)
+            items.append(Release(release_id=release_id, source=source, artist=ref.artist.strip(), title=title))
+
+        if not items:
+            raise ToolError("No releases given")
+
+        try:
+            job = runner.jobs.create_job(
+                name, items, mode=mode, num_in_catalog=len(items), formats=["flac"] if flac_only else formats,
+                download_folder=download_folder, prefer=prefer, min_bitrate=min_bitrate, audio_only=audio_only,
+                accept_partial=accept_partial, skip_owned=skip_owned, max_active_releases=max(1, max_active_releases),
+                max_per_uploader=max(1, max_per_uploader), start_timeout=max(60, start_timeout_seconds),
+                min_speed=max(0, min_speed_kbps) * 1000, retry_missing_hours=max(0, retry_missing_hours),
+                search_interval=max(1, search_interval_seconds)
+            )
+
+        except ValueError as error:
+            raise ToolError(str(error)) from error
+
+        job["num_duplicates_left_out"] = len(releases) - len(items)
         return job
 
     @tool()

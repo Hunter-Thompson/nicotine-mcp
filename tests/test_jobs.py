@@ -1344,3 +1344,43 @@ class LibraryTest(TestCase):
 
         library.invalidate()
         self.assertEqual(library.find_release(self.release()), path)
+
+
+class ReleaseListJobTest(JobTestCase):
+    """Jobs started from a list of release IDs, as the albums of a playlist."""
+
+    def create_by_id(self, number, **options):
+
+        options.setdefault("search_interval", 0)
+        release = Release(f"musicbrainz:{number}", "musicbrainz", "", "")
+        return self.manager.create_job("Playlist", [release], mode="download", **options)["job_id"]
+
+    def test_release_known_only_by_id_is_named_by_the_catalog(self):
+
+        self.share_release(1)
+        job_id = self.create_by_id(1)
+
+        self.steps(3)
+
+        job = self.manager.jobs[job_id]
+        item = job.items[0]
+
+        self.assertEqual(item.release["title"], "Album 1")
+        self.assertEqual(item.release["artist"], "Barker")
+        self.assertEqual(item.state, ItemState.DOWNLOADING)
+        self.assertIsNone(job.label_id)
+        self.assertIsNone(job.artist_id)
+        self.assertEqual(self.manager.get_job(job_id)["releases"][0]["title"], "Album 1")
+
+    def test_release_known_only_by_id_is_missing_while_the_catalog_is_down(self):
+
+        self.catalog.fail_with = CatalogError("down")
+        job_id = self.create_by_id(1)
+
+        self.steps(1)
+
+        item = self.manager.jobs[job_id].items[0]
+
+        self.assertEqual(item.state, ItemState.NOT_FOUND)
+        self.assertIn("catalog could not be asked", item.note)
+        self.assertEqual(self.automation.queries, [])

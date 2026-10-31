@@ -106,6 +106,10 @@ Typical workflows:
   and start_artist_job, passing the artist's ID in both catalogs as artist_id and
   also_artist_id. Compilations they only appear on are left out unless include_appearances
   is set. Aliases and side projects count as artists of their own.
+- The albums of a playlist, or any list of albums: call find_album(artist, title) for each
+  one to get its release_id (catalog lookups only, nothing is searched yet), then pass them
+  all to start_release_job(name, releases) in one go. A release listed twice is collected
+  once, and albums already on disk are skipped. Preview first, then start_job_downloads.
 - Controlling a job: pause_job finishes the albums that have started by default, and with
   now=true stops them where they are. skip_release leaves one out, and prioritize_release
   makes one the next to go, or brings it back.

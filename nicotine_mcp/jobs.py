@@ -748,6 +748,22 @@ class JobManager:
 
             await anyio.sleep(min(remaining, 1.0))
 
+    async def _load_tracklist(self, item, release):
+        """Returns the release with its tracklist, or None when there is nothing to search for."""
+
+        try:
+            return await self.sourcer.load_tracklist(release)
+
+        except CatalogError as error:
+            if not release.title:
+                # Only its ID was known, so there is nothing to search for. retry_missing asks again
+                self._finish_item(item, ItemState.NOT_FOUND, release, f"the catalog could not be asked: {error}")
+                return None
+
+            # Worth a try anyway, the folder names may be enough to recognize it
+            item.note = f"no tracklist: {error}"
+            return release
+
     def _next_pending_item(self, job):
 
         for item in job.items:
@@ -775,14 +791,10 @@ class JobManager:
         if job.mode == "download" and self._has_enough_ready(job):
             return
 
-        release = Release.from_dict(item.release)
+        release = await self._load_tracklist(item, Release.from_dict(item.release))
 
-        try:
-            release = await self.sourcer.load_tracklist(release)
-
-        except CatalogError as error:
-            # Worth a try anyway, the folder names may be enough to recognize it
-            item.note = f"no tracklist: {error}"
+        if release is None:
+            return
 
         if not self.sourcer.catalog.is_on_label(release, job.label_id):
             self._finish_item(item, ItemState.NOT_ON_LABEL, release, "the catalog credits this release to other labels")

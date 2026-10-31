@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Annotated
 from typing import Literal
 
+from pydantic import BaseModel
 from pydantic import Field
 
 
@@ -75,6 +76,25 @@ IncludeAppearances = described(
           "theirs, like compilations. These can be large downloads for a single track."
 )
 ReleaseId = described(str, "Release ID from a catalog, e.g. 'musicbrainz:118f2d45-...' or 'discogs:772763'.")
+
+
+class ReleaseRef(BaseModel):
+    """A release to collect, as a catalog listed it."""
+
+    release_id: str = Field(description="Release ID from a catalog, e.g. 'musicbrainz:118f2d45-...' or "
+                                        "'discogs:772763'.")
+    artist: str = Field("", description="Artist of the release, shown while the job runs. Taken from the catalog "
+                                        "when left out.")
+    title: str = Field("", description="Title of the release, shown while the job runs. Taken from the catalog "
+                                       "when left out.")
+
+
+ReleaseRefs = described(
+    list[ReleaseRef],
+    "Releases to collect, as find_album, find_track_albums or a catalog listing returned them. "
+    "One listed twice is collected once."
+)
+JobName = described(str, "Name of the job, used for the download subfolder, e.g. the name of the playlist.")
 JobId = described(str, "Job ID from start_label_job, start_artist_job or list_jobs.")
 JobMode = described(
     Literal["preview", "download"],

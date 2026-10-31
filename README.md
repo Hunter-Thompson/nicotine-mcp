@@ -171,6 +171,8 @@ agent, so it can point you there.
 | `find_artist`              | Find artists by name in MusicBrainz and Discogs |
 | `get_artist_releases`      | An artist's discography, with editions merged and what you already own marked |
 | `start_artist_job`         | Start a background job that previews or downloads an artist's discography |
+| `find_album`               | Find an album by artist and title in MusicBrainz and Discogs, with what you own marked |
+| `start_release_job`        | Start a background job that previews or downloads a list of releases, e.g. a playlist's albums |
 | `skip_release`, `prioritize_release` | Leave a release out of a job, or make it the next to go (also brings one back) |
 | `export_state`             | Save jobs and downloads to a file for another user with the same drive |
 | `get_job`, `list_jobs`     | Progress of jobs, and what they found for each release |
@@ -316,6 +318,11 @@ work like the label tools, with the artist's ID in both catalogs as `artist_id` 
 artist count, including collaborations. Compilations they only have a track on and remixes they
 did for others are left out unless you set `include_appearances`, since those are whole albums for
 a single track. Aliases and side projects are artists of their own.
+
+**The albums of a playlist, or any list:** `find_album(artist, title)` for each one gives its
+`release_id` without searching Soulseek, then `start_release_job(name, releases)` collects them all
+in one job, in a subfolder named after the list. A release given twice is collected once, releases
+already on disk are skipped, and the job works like a label job otherwise.
 
 Known limitations:
 

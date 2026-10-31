@@ -62,6 +62,7 @@ _RELEASE_TYPE_WORDS = {"ep", "lp"}  # Part of the title in one catalog, and not 
 
 _MAX_PAGES = 30
 _MIN_RECORDING_SCORE = 60
+_ALBUM_SEARCH_SIZE = 25
 
 _DISCOGS_NAME_SUFFIX_REGEX = re.compile(r"\s*\(\d+\)")
 _PARENTHESES_REGEX = re.compile(r"\([^)]*\)|\[[^\]]*\]")
@@ -262,6 +263,56 @@ def merge_catalogs(primary, secondary):
             known[key] = release
 
     return merged, num_added
+
+
+def _base_title_tokens(title):
+    """The words of a title without remarks in parentheses and release types like 'EP'."""
+
+    tokens = significant_tokens(_PARENTHESES_REGEX.sub(" ", title or ""))
+    return tokens - _RELEASE_TYPE_WORDS or tokens
+
+
+def album_title_rank(wanted, title):
+    """How well the title of a release matches the one asked for: 0 when it is the same, 1 apart
+    from a remark in parentheses or a type like 'EP', 2 when one contains the other, None otherwise."""
+
+    if normalize_text(wanted) == normalize_text(title):
+        return 0
+
+    wanted_tokens = _base_title_tokens(wanted)
+    title_tokens = _base_title_tokens(title)
+
+    if wanted_tokens == title_tokens:
+        return 1
+
+    if wanted_tokens and title_tokens and (wanted_tokens <= title_tokens or title_tokens <= wanted_tokens):
+        return 2
+
+    return None
+
+
+def rank_album_matches(releases, artist, title):
+    """Keeps the releases that are the album asked for, the closest match first: by title, then
+    albums before EPs and singles, then the oldest. Any credit shared with the artist counts, so
+    collaborations are found, and compilations are matched by title alone."""
+
+    ranked = []
+
+    for release in releases:
+        title_rank = album_title_rank(title, release.title)
+
+        if title_rank is None:
+            continue
+
+        if not (is_various_artists(artist) or is_various_artists(release.artist)
+                or significant_tokens(artist) & significant_tokens(release.artist)):
+            continue
+
+        rank = (title_rank, _KIND_RANK.get(release.kind, len(_KIND_RANK)), release.year or 9999)
+        ranked.append((rank, release))
+
+    ranked.sort(key=lambda entry: entry[0])
+    return [release for _rank, release in ranked]
 
 
 # MusicBrainz #
@@ -516,6 +567,23 @@ class MusicBrainzClient:
 
         return albums
 
+    def find_albums(self, artist, title, limit=10):
+        """Returns the releases with this title by this artist, the closest match first,
+        with their editions merged."""
+
+        query = f"release:{self._quote(title)} AND artist:{self._quote(artist)}"
+        data = self._get("release", query=query, limit=_ALBUM_SEARCH_SIZE)
+        groups = {}
+
+        for item in data.get("releases") or []:
+            if item.get("status") in {"Bootleg", "Pseudo-Release"}:
+                continue
+
+            group_id = (item.get("release-group") or {}).get("id") or item["id"]
+            groups.setdefault(group_id, []).append(item)
+
+        return rank_album_matches(self._merge_groups(groups), artist, title)[:limit]
+
 
 # Discogs #
 
@@ -571,6 +639,34 @@ class DiscogsClient:
 
     def find_artists(self, name, limit=10):
         return self._find_by_name(name, "artist", limit)
+
+    def find_albums(self, artist, title, limit=10):
+        """Returns the releases with this title by this artist, the closest match first,
+        with their editions merged."""
+
+        params = {"release_title": title, "type": "release", "per_page": _ALBUM_SEARCH_SIZE}
+
+        if not is_various_artists(artist):
+            params["artist"] = artist
+
+        data = self._get("database/search", **params)
+        items = []
+
+        for result in data.get("results") or []:
+            # Search results carry 'Artist - Title' in one field
+            credited, separator, release_title = (result.get("title") or "").partition(" - ")
+
+            if not separator:
+                continue
+
+            year = str(result.get("year") or "")
+            items.append({
+                "id": result["id"], "artist": credited, "title": release_title,
+                "format": ", ".join(result.get("format") or []), "catno": result.get("catno"),
+                "year": int(year) if year.isdigit() else None
+            })
+
+        return rank_album_matches(self._merge_listing(items), artist, title)[:limit]
 
     @staticmethod
     def _kind_from_format(format_names):
@@ -901,6 +997,31 @@ class Catalog:
             raise ValueError("Both an artist and a title are required")
 
         return self.musicbrainz.find_track_albums(artist.strip(), title.strip(), limit=limit)
+
+    def find_albums(self, artist, title, limit=10):
+        """Looks an album up in every catalog. The same release known to both is listed once,
+        and a catalog that cannot be reached is only a warning while the other one answers."""
+
+        artist = (artist or "").strip()
+        title = (title or "").strip()
+
+        if not artist or not title:
+            raise ValueError("Both an artist and a title are required")
+
+        albums = []
+        warnings = []
+
+        for client in (self.musicbrainz, self.discogs):
+            try:
+                albums, _num_added = merge_catalogs(albums, client.find_albums(artist, title, limit=limit))
+
+            except CatalogError as error:
+                warnings.append(str(error))
+
+        if not albums and len(warnings) == 2:
+            raise CatalogError("; ".join(warnings))
+
+        return {"albums": rank_album_matches(albums, artist, title)[:limit], "warnings": warnings}
 
     @staticmethod
     def is_on_label(release, label_id):

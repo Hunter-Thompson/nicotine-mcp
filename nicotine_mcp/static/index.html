@@ -664,7 +664,7 @@
   function renderCrates(jobs) {
     $("jobs-count").textContent = jobs.length;
     if (!jobs.length) {
-      paint($("crates"), `<div class="card empty" style="grid-column:1/-1"><strong>No crates yet</strong>Ask your agent to collect a label or an artist's discography. It shows up here with every release and its progress.</div>`);
+      paint($("crates"), `<div class="card empty" style="grid-column:1/-1"><strong>No crates yet</strong>Ask your agent to collect a label, an artist's discography or the albums of a playlist. It shows up here with every release and its progress.</div>`);
       return;
     }
     const before = painted.get($("crates"));
@@ -682,7 +682,7 @@
           <div class="job-title">
             <h3><button type="button" data-job-open="${esc(job.job_id)}" aria-expanded="${isOpen}">${esc(job.name)}</button></h3>
             <div class="job-meta">
-              <span>${job.artist_id ? "artist" : "label"}</span><span>·</span>
+              <span>${job.artist_id ? "artist" : job.label_id ? "label" : "list"}</span><span>·</span>
               <span>${job.num_releases < job.num_in_catalog ? `${job.num_releases} of ${job.num_in_catalog} releases` : plural(job.num_releases, "release")}</span>
               ${(job.formats || []).join() === "flac" ? `<span class="tag">FLAC only</span>` : ""}
               ${job.mode === "preview" ? `<span class="tag">preview</span>` : ""}

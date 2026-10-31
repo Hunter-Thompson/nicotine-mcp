@@ -12,8 +12,10 @@ from nicotine_mcp.catalog import CatalogError
 from nicotine_mcp.catalog import DiscogsClient
 from nicotine_mcp.catalog import HttpClient
 from nicotine_mcp.catalog import MusicBrainzClient
+from nicotine_mcp.catalog import album_title_rank
 from nicotine_mcp.catalog import filter_releases
 from nicotine_mcp.catalog import merge_catalogs
+from nicotine_mcp.catalog import rank_album_matches
 from nicotine_mcp.matching import Release
 
 BITE_ID = "d4d9c40d-894e-49f6-89e6-28b19919cef9"
@@ -190,6 +192,23 @@ class MusicBrainzTest(TestCase):
         self.assertEqual(artists[0]["artist_id"], "musicbrainz:a1")
         self.assertEqual(artists[0]["description"], "techno producer")
         self.assertEqual(artists[0]["active_since"], 2012)
+
+    def test_find_albums_prefers_the_exact_title_and_merges_editions(self):
+
+        client = self.client([("ws/2/release", {"releases": [
+            mb_release("r1", "Altars (The Remixes)", group="g1"),
+            mb_release("r2", "Altars", group="g2", media=(('12" Vinyl', 4),), date="2021-01-01"),
+            mb_release("r3", "Altars", group="g2", date="2020-10-23"),
+            mb_release("r4", "Altars", artist="Somebody Else"),
+            mb_release("r5", "Unrelated Record")
+        ]})])
+
+        albums = client.find_albums("New Frames", "Altars")
+
+        self.assertEqual([album.title for album in albums], ["Altars", "Altars (The Remixes)"])
+        self.assertEqual(albums[0].release_id, "musicbrainz:r3")  # The digital edition is preferred
+        self.assertEqual(albums[0].year, 2020)
+        self.assertIn("release%3A%22Altars%22+AND+artist%3A%22New+Frames%22", self.opener.requests[0].full_url)
 
     def test_artist_releases_leaves_out_appearances_by_default(self):
 
@@ -465,6 +484,66 @@ class DiscogsTest(TestCase):
         self.assertEqual([track.title for track in release.tracks], ["One", "Two", "Three"])
         self.assertEqual([track.length for track in release.tracks], [352, 3723, 0])
 
+    def test_find_albums_parses_search_results(self):
+
+        client = self.client([("database/search", {"results": [
+            {"id": 5, "type": "release", "title": "New Frames - Altars", "year": "2020",
+             "format": ["Vinyl", '12"', "EP"], "catno": "BITE016", "label": ["BITE"]},
+            {"id": 6, "type": "release", "title": "New Frames - Altars", "year": "2021",
+             "format": ["File", "FLAC"], "catno": "BITE016D"},
+            {"id": 7, "type": "release", "title": "Other Band - Altars", "year": "1999", "format": ["CD"]},
+            {"id": 8, "type": "release", "title": "No Separator", "year": "1999", "format": ["CD"]}
+        ]})])
+
+        albums = client.find_albums("New Frames", "Altars")
+
+        self.assertEqual(len(albums), 1)
+        self.assertEqual(albums[0].release_id, "discogs:6")  # The file edition is preferred
+        self.assertEqual(albums[0].artist, "New Frames")
+        self.assertEqual(albums[0].title, "Altars")
+        self.assertEqual(albums[0].year, 2020)
+        self.assertEqual(albums[0].catalog_numbers, ["BITE016D", "BITE016"])
+        self.assertIn("release_title=Altars", self.opener.requests[0].full_url)
+        self.assertIn("artist=New+Frames", self.opener.requests[0].full_url)
+
+    def test_find_albums_of_various_artists_searches_by_title_only(self):
+
+        client = self.client([("database/search", {"results": [
+            {"id": 5, "type": "release", "title": "Various - Self-Aware III", "year": "2020", "format": ["File"]}
+        ]})])
+
+        albums = client.find_albums("Various Artists", "Self-Aware III")
+
+        self.assertEqual([album.release_id for album in albums], ["discogs:5"])
+        self.assertNotIn("artist=", self.opener.requests[0].full_url)
+
+
+class AlbumMatchTest(TestCase):
+
+    def test_title_ranks(self):
+
+        self.assertEqual(album_title_rank("Tocsin", "tocsin"), 0)
+        self.assertEqual(album_title_rank("Separate Ways (Original Mix)", "Separate Ways"), 1)
+        self.assertEqual(album_title_rank("Mass Control - EP", "Mass Control"), 1)
+        self.assertEqual(album_title_rank("Tocsin", "Tocsin Live"), 2)
+        self.assertIsNone(album_title_rank("Tocsin", "Viva"))
+        self.assertIsNone(album_title_rank("", "Viva"))
+
+    def test_matches_are_ranked_by_title_then_kind_then_age(self):
+
+        releases = [
+            Release("discogs:1", "discogs", "Tham, Blackworks", "Separate Ways", kind="single", year=2020),
+            Release("discogs:2", "discogs", "Tham", "Separate Ways", kind="ep", year=2021),
+            Release("discogs:3", "discogs", "Tham", "Separate Ways (Remixes)", kind="ep", year=2019),
+            Release("discogs:4", "discogs", "Someone Else", "Separate Ways", kind="album", year=2000),
+            Release("discogs:5", "discogs", "Various", "Separate Ways", kind="compilation", year=2000)
+        ]
+
+        ranked = rank_album_matches(releases, "Tham", "Separate Ways")
+
+        self.assertEqual([release.release_id for release in ranked],
+                         ["discogs:2", "discogs:1", "discogs:5", "discogs:3"])
+
 
 class FilterTest(TestCase):
 
@@ -675,3 +754,40 @@ class FacadeTest(TestCase):
         self.assertTrue(Catalog.is_on_label(release, "discogs:309"))
         self.assertTrue(Catalog.is_on_label(release, f"musicbrainz:{BITE_ID}"))
         self.assertTrue(Catalog.is_on_label(Release("discogs:1", "discogs", "A", "B"), "discogs:178535"))
+
+    def test_find_albums_combines_catalogs(self):
+
+        catalog = self.catalog(
+            [("ws/2/release", {"releases": [mb_release("r1", "Altars")]})],
+            [("database/search", {"results": [
+                {"id": 1, "type": "release", "title": "New Frames - Altars", "year": "2020", "format": ["File"]},
+                {"id": 2, "type": "release", "title": "New Frames - Altars (Remixes)", "year": "2021",
+                 "format": ["File"]}
+            ]})]
+        )
+
+        result = catalog.find_albums("New Frames", "Altars")
+
+        self.assertEqual([album.release_id for album in result["albums"]], ["musicbrainz:r1", "discogs:2"])
+        self.assertEqual(result["warnings"], [])
+
+    def test_find_albums_with_one_catalog_down(self):
+
+        catalog = self.catalog([("ws/2/release", [http_error(400)])], [("database/search", {"results": [
+            {"id": 1, "type": "release", "title": "New Frames - Altars", "year": "2020", "format": ["File"]}
+        ]})])
+
+        result = catalog.find_albums("New Frames", "Altars")
+
+        self.assertEqual([album.release_id for album in result["albums"]], ["discogs:1"])
+        self.assertEqual(len(result["warnings"]), 1)
+
+    def test_find_albums_with_both_catalogs_down(self):
+
+        catalog = self.catalog([("ws/2/release", [http_error(400)])], [("database/search", [http_error(400)])])
+
+        with self.assertRaises(CatalogError):
+            catalog.find_albums("New Frames", "Altars")
+
+        with self.assertRaises(ValueError):
+            catalog.find_albums("New Frames", " ")

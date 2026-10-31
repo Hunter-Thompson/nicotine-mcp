@@ -48,6 +48,13 @@ class ToolCatalog(FakeCatalog):
 
         return self.albums[:limit]
 
+    def find_albums(self, _artist, _title, limit=10):
+
+        if self.track_error:
+            raise self.track_error
+
+        return {"albums": [release for _number, release in sorted(self.releases.items())][:limit], "warnings": []}
+
     def find_labels(self, name, _source="all"):
         return {"labels": [{"label_id": MB_LABEL, "name": name}], "warnings": []}
 
@@ -158,7 +165,7 @@ class ToolTest(TestCase):
             "find_track_albums", "download_album_for_track", "download_release", "find_label", "get_label_releases",
             "start_label_job", "find_artist", "get_artist_releases", "start_artist_job", "get_job", "list_jobs",
             "start_job_downloads", "pause_job", "resume_job", "pause_all_downloads", "resume_all_downloads",
-            "retry_job_missing", "cancel_job", "get_status", "download_best_album"
+            "retry_job_missing", "cancel_job", "get_status", "download_best_album", "find_album", "start_release_job"
         }, names)
 
 
@@ -381,6 +388,71 @@ class ArtistToolsTest(ToolTest):
 
         self.assertIsNone(self.runner.jobs.jobs[job_id].label_id)
         self.assertEqual(self.runner.jobs.jobs[job_id].artist_id, "discogs:9")
+
+
+class ReleaseListToolsTest(ToolTest):
+
+    def setUp(self):
+
+        super().setUp()
+
+        for number in range(1, 4):
+            release = make_release(number)
+            release.tracks = tracks_of(release)
+            self.catalog.releases[number] = release
+
+    def test_find_album_lists_matches_with_what_is_owned(self):
+
+        result = self.ok("find_album", artist="Barker", title="Album 1")
+
+        self.assertEqual([album["release_id"] for album in result["albums"]], [
+            "musicbrainz:1", "musicbrainz:2", "musicbrainz:3"
+        ])
+        self.assertIsNone(result["albums"][0]["owned_at"])
+        self.assertEqual(result["num_owned"], 0)
+        self.assertEqual(result["warnings"], [])
+
+    def test_find_album_needs_both_names(self):
+
+        self.catalog.track_error = ValueError("Both an artist and a title are required")
+        is_error, message = self.call("find_album", artist="", title="Album 1")
+
+        self.assertTrue(is_error)
+        self.assertIn("Both an artist and a title", message)
+
+    def test_start_release_job_collects_each_release_once(self):
+
+        job = self.ok("start_release_job", name="soul-less body music", mode="download", flac_only=True, releases=[
+            {"release_id": "musicbrainz:1", "artist": "Barker", "title": "Album 1"},
+            {"release_id": "musicbrainz:1"},
+            {"release_id": "discogs:7", "artist": "Barker", "title": "Album 1"},
+            {"release_id": "musicbrainz:2", "artist": "Barker", "title": "Album 2"},
+            {"release_id": "musicbrainz:3"}
+        ])
+
+        self.assertEqual(job["num_releases"], 3)
+        self.assertEqual(job["num_duplicates_left_out"], 2)
+        self.assertEqual(job["mode"], "download")
+        self.assertEqual(job["formats"], ["flac"])
+        self.assertIsNone(job["label_id"])
+        self.assertIsNone(job["artist_id"])
+
+        items = self.runner.jobs.jobs[job["job_id"]].items
+
+        self.assertEqual([item.release["title"] for item in items], ["Album 1", "Album 2", ""])
+        self.assertEqual(items[2].release["source"], "musicbrainz")
+
+    def test_start_release_job_rejects_unknown_ids_and_empty_lists(self):
+
+        is_error, message = self.call("start_release_job", name="x", releases=[{"release_id": "spotify:1"}])
+
+        self.assertTrue(is_error)
+        self.assertIn("Invalid release ID 'spotify:1'", message)
+
+        is_error, message = self.call("start_release_job", name="x", releases=[])
+
+        self.assertTrue(is_error)
+        self.assertIn("No releases given", message)
 
 
 class LabelToolsTest(ToolTest):

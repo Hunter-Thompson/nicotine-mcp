@@ -124,6 +124,7 @@ class Release:
     formats: list = field(default_factory=list)
     track_count: int = 0
     label_ids: list = field(default_factory=list)
+    labels: list = field(default_factory=list)  # Label names, when the catalog gave them
     listed_on_label: str | None = None  # The label ID whose listing this came from
     tracks: list | None = None  # None until the tracklist has been fetched
 

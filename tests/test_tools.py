@@ -441,6 +441,7 @@ class ReleaseListToolsTest(ToolTest):
 
         self.assertEqual([item.release["title"] for item in items], ["Album 1", "Album 2", ""])
         self.assertEqual(items[2].release["source"], "musicbrainz")
+        self.assertEqual(self.runner.jobs.jobs[job["job_id"]].group_by, "artist")
 
     def test_start_release_job_rejects_unknown_ids_and_empty_lists(self):
 

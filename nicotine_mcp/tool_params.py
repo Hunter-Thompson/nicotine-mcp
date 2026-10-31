@@ -94,7 +94,12 @@ ReleaseRefs = described(
     "Releases to collect, as find_album, find_track_albums or a catalog listing returned them. "
     "One listed twice is collected once."
 )
-JobName = described(str, "Name of the job, used for the download subfolder, e.g. the name of the playlist.")
+JobName = described(str, "Name of the job, as the dashboard shows it, e.g. the name of the playlist.")
+JobGrouping = described(
+    Literal["artist", "label", "job"],
+    "How the releases are filed in the download folder: a subfolder per artist (compilations go by label), "
+    "a subfolder per label, or one subfolder named after the job."
+)
 JobId = described(str, "Job ID from start_label_job, start_artist_job or list_jobs.")
 JobMode = described(
     Literal["preview", "download"],
@@ -107,8 +112,8 @@ Sample = described(
           "Gives a quick estimate of how much is available."
 )
 JobDownloadFolder = described(
-    str | None, "Folder to collect the releases in. Defaults to a subfolder named after the "
-                "label or artist in the Nicotine+ download folder."
+    str | None, "Folder to collect the releases in. Defaults to the Nicotine+ download folder, in a subfolder "
+                "named after the label or artist; a list of releases is filed by artist there instead."
 )
 MaxActiveReleases = described(int, "How many releases to download at the same time.")
 MaxPerUploader = described(int, "How many releases to download from one uploader at the same time.")

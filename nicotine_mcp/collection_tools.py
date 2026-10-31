@@ -35,6 +35,7 @@ from nicotine_mcp.tool_params import FlacOnly
 from nicotine_mcp.tool_params import Formats
 from nicotine_mcp.tool_params import IncludeAppearances
 from nicotine_mcp.tool_params import JobDownloadFolder
+from nicotine_mcp.tool_params import JobGrouping
 from nicotine_mcp.tool_params import JobId
 from nicotine_mcp.tool_params import JobMode
 from nicotine_mcp.tool_params import JobName
@@ -464,6 +465,7 @@ def register_collection_tools(tool, runner, preferences, run_search):
         name: JobName,
         releases: ReleaseRefs,
         mode: JobMode = "preview",
+        group_by: JobGrouping = "artist",
         flac_only: FlacOnly = False,
         formats: Formats = None,
         prefer: Prefer = "balanced",
@@ -481,8 +483,9 @@ def register_collection_tools(tool, runner, preferences, run_search):
     ) -> dict:
         """Starts a background job that collects a list of releases, such as the albums of a
         playlist: skips those on disk, searches for the rest, and accepts only folders that match
-        the tracklists. A release listed twice is collected once. Get the IDs from find_album,
-        find_track_albums or a catalog listing.
+        the tracklists. A release listed twice is collected once, and each one is filed under its
+        artist, a compilation under its label. Get the IDs from find_album, find_track_albums or a
+        catalog listing.
 
         Returns immediately, check on it with get_job. Run a preview first and tell the user what
         it found, then use start_job_downloads, unless they explicitly asked to download right away.
@@ -517,7 +520,8 @@ def register_collection_tools(tool, runner, preferences, run_search):
         try:
             job = runner.jobs.create_job(
                 name, items, mode=mode, num_in_catalog=len(items), formats=["flac"] if flac_only else formats,
-                download_folder=download_folder, prefer=prefer, min_bitrate=min_bitrate, audio_only=audio_only,
+                group_by=group_by, download_folder=download_folder, prefer=prefer, min_bitrate=min_bitrate,
+                audio_only=audio_only,
                 accept_partial=accept_partial, skip_owned=skip_owned, max_active_releases=max(1, max_active_releases),
                 max_per_uploader=max(1, max_per_uploader), start_timeout=max(60, start_timeout_seconds),
                 min_speed=max(0, min_speed_kbps) * 1000, retry_missing_hours=max(0, retry_missing_hours),

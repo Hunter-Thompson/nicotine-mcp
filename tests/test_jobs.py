@@ -17,6 +17,7 @@ from nicotine_mcp.jobs import ItemState
 from nicotine_mcp.jobs import JobManager
 from nicotine_mcp.jobs import JobStatus
 from nicotine_mcp.jobs import is_destination_available
+from nicotine_mcp.job_models import release_folder_name
 from nicotine_mcp.library import LibraryIndex
 from nicotine_mcp.matching import Release
 from nicotine_mcp.matching import Track
@@ -1384,3 +1385,28 @@ class ReleaseListJobTest(JobTestCase):
         self.assertEqual(item.state, ItemState.NOT_FOUND)
         self.assertIn("catalog could not be asked", item.note)
         self.assertEqual(self.automation.queries, [])
+
+    def test_releases_are_filed_by_artist(self):
+
+        self.share_release(1)
+        job_id = self.create_by_id(1, group_by="artist")
+
+        self.steps(3)
+
+        self.assertEqual(self.manager.jobs[job_id].download_folder, "/downloads")
+        self.assertEqual(self.runner.started_downloads[-1][2], "/downloads/Barker")
+        self.assertEqual(self.manager.jobs[job_id].items[0].download_folder, "/downloads/Barker/Album 1")
+
+    def test_release_folder_names(self):
+
+        barker = Release("musicbrainz:1", "musicbrainz", "Barker & Baumecker", "Album", primary_artist="Barker",
+                         labels=["Ostgut Ton"])
+        various = Release("musicbrainz:2", "musicbrainz", "Various Artists", "Compilation", labels=["BITE"])
+        unknown = Release("musicbrainz:3", "musicbrainz", "Various Artists", "Compilation")
+
+        self.assertEqual(release_folder_name(barker, "artist"), "Barker")
+        self.assertEqual(release_folder_name(barker, "label"), "Ostgut Ton")
+        self.assertEqual(release_folder_name(various, "artist"), "BITE")
+        self.assertEqual(release_folder_name(various, "label"), "BITE")
+        self.assertEqual(release_folder_name(unknown, "artist"), "Various Artists")
+        self.assertEqual(release_folder_name(unknown, "label"), "Various Artists")

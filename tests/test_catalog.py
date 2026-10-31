@@ -12,6 +12,7 @@ from nicotine_mcp.catalog import CatalogError
 from nicotine_mcp.catalog import DiscogsClient
 from nicotine_mcp.catalog import HttpClient
 from nicotine_mcp.catalog import MusicBrainzClient
+from nicotine_mcp.catalog import _relaxed_name
 from nicotine_mcp.catalog import album_title_rank
 from nicotine_mcp.catalog import filter_releases
 from nicotine_mcp.catalog import merge_catalogs
@@ -208,6 +209,7 @@ class MusicBrainzTest(TestCase):
         self.assertEqual([album.title for album in albums], ["Altars", "Altars (The Remixes)"])
         self.assertEqual(albums[0].release_id, "musicbrainz:r3")  # The digital edition is preferred
         self.assertEqual(albums[0].year, 2020)
+        self.assertEqual(albums[0].labels, ["BITE"])
         self.assertIn("release%3A%22Altars%22+AND+artist%3A%22New+Frames%22", self.opener.requests[0].full_url)
 
     def test_artist_releases_leaves_out_appearances_by_default(self):
@@ -503,6 +505,7 @@ class DiscogsTest(TestCase):
         self.assertEqual(albums[0].title, "Altars")
         self.assertEqual(albums[0].year, 2020)
         self.assertEqual(albums[0].catalog_numbers, ["BITE016D", "BITE016"])
+        self.assertEqual(albums[0].labels, ["BITE"])  # Merged from the other edition
         self.assertIn("release_title=Altars", self.opener.requests[0].full_url)
         self.assertIn("artist=New+Frames", self.opener.requests[0].full_url)
 
@@ -528,6 +531,14 @@ class AlbumMatchTest(TestCase):
         self.assertEqual(album_title_rank("Tocsin", "Tocsin Live"), 2)
         self.assertIsNone(album_title_rank("Tocsin", "Viva"))
         self.assertIsNone(album_title_rank("", "Viva"))
+
+    def test_relaxed_names(self):
+
+        self.assertEqual(_relaxed_name("SDH (Semiotics Department of Heteronyms)"), "SDH")
+        self.assertEqual(_relaxed_name("Separate Ways (Original Mix)"), "Separate Ways")
+        self.assertEqual(_relaxed_name("Mass Control - EP"), "Mass Control")
+        self.assertEqual(_relaxed_name("Border Country: The Remixes"), "Border Country: The Remixes")
+        self.assertEqual(_relaxed_name(""), "")
 
     def test_matches_are_ranked_by_title_then_kind_then_age(self):
 
@@ -791,3 +802,26 @@ class FacadeTest(TestCase):
 
         with self.assertRaises(ValueError):
             catalog.find_albums("New Frames", " ")
+
+    def test_find_albums_asks_again_without_remarks_in_parentheses(self):
+
+        mb_http, mb_opener, _sleeps = make_http([
+            ("artist%3A%22SDH+%28Semiotics", {"releases": []}),
+            ("ws/2/release", {"releases": [mb_release("r1", "Semiotics Department of Heteronyms", artist="SDH")]})
+        ])
+        discogs_http, discogs_opener, _sleeps = make_http([
+            ("artist=SDH+%28Semiotics", {"results": []}),
+            ("database/search", {"results": [
+                {"id": 1, "type": "release", "title": "SDH (4) - Semiotics Department Of Heteronyms", "year": "2018",
+                 "format": ["File"]}
+            ]})
+        ])
+        catalog = Catalog(MusicBrainzClient(mb_http), DiscogsClient(discogs_http))
+
+        result = catalog.find_albums("SDH (Semiotics Department of Heteronyms)", "Semiotics Department Of Heteronyms")
+
+        self.assertEqual([album.release_id for album in result["albums"]], ["musicbrainz:r1"])
+        self.assertEqual(len(mb_opener.requests), 2)
+        self.assertEqual(len(discogs_opener.requests), 2)
+        self.assertIn("artist%3A%22SDH%22", mb_opener.requests[1].full_url)
+        self.assertTrue(discogs_opener.requests[1].full_url.endswith("&artist=SDH"))

@@ -39,6 +39,7 @@ from nicotine_mcp.job_models import JobItem
 from nicotine_mcp.job_models import JobStatus
 from nicotine_mcp.job_models import PauseMode
 from nicotine_mcp.job_models import clean_folder_name
+from nicotine_mcp.job_models import release_folder_name
 from nicotine_mcp.job_models import describe_item
 from nicotine_mcp.job_models import describe_spine
 from nicotine_mcp.job_models import is_destination_available
@@ -722,15 +723,30 @@ class JobManager:
         return await self.runner.call_async(self.runner.automation.is_connected)
 
     async def _get_root_folder(self, job):
-        """Keeps a label's releases together in a subfolder of the download folder."""
+        """Keeps a label's or an artist's releases together in a subfolder of the download folder.
+        A list of releases is filed in the download folder itself, by artist or label."""
 
         if job.download_folder:
             return job.download_folder
 
         default_folder = (await self.runner.call_async(self.runner.automation.get_status))["download_folder"]
-        job.download_folder = os.path.join(default_folder, clean_folder_name(job.name))
+
+        if job.group_by == "job":
+            job.download_folder = os.path.join(default_folder, clean_folder_name(job.name))
+        else:
+            job.download_folder = default_folder
+
         self._mark_dirty()
         return job.download_folder
+
+    @staticmethod
+    def _release_folder(job, item):
+        """Where a release of the job goes."""
+
+        if job.group_by == "job":
+            return job.download_folder
+
+        return os.path.join(job.download_folder, release_folder_name(Release.from_dict(item.release), job.group_by))
 
     async def _before_search(self):
         """Spaces out searches across all jobs, a long burst of them looks like abuse to the server."""
@@ -959,7 +975,7 @@ class JobManager:
                 return
 
             sources = await self.sourcer.pick_sources(sources)
-            winner, results = await self.sourcer.race_sources(sources, job.download_folder)
+            winner, results = await self.sourcer.race_sources(sources, self._release_folder(job, item))
             failed_usernames = {result["username"] for result in results if result["state"] in {"failed", "waiting"}}
             waiting_usernames = {result["username"] for result in results if result["state"] == "waiting"}
 
@@ -1002,7 +1018,8 @@ class JobManager:
 
         try:
             result = await self.runner.request_folder_download(
-                source["username"], source["folder_path"], job.download_folder, job.audio_only, job.formats
+                source["username"], source["folder_path"], self._release_folder(job, item), job.audio_only,
+                job.formats
             )
 
         except (ToolError, TimeoutError, RuntimeError) as error:

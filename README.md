@@ -321,8 +321,9 @@ a single track. Aliases and side projects are artists of their own.
 
 **The albums of a playlist, or any list:** `find_album(artist, title)` for each one gives its
 `release_id` without searching Soulseek, then `start_release_job(name, releases)` collects them all
-in one job, in a subfolder named after the list. A release given twice is collected once, releases
-already on disk are skipped, and the job works like a label job otherwise.
+in one job. Each release is filed under its artist, a compilation under its label (`group_by` can
+make that the label for all of them, or one subfolder named after the job). A release given twice is
+collected once, releases already on disk are skipped, and the job works like a label job otherwise.
 
 Known limitations:
 

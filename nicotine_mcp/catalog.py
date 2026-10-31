@@ -206,6 +206,10 @@ def _merge_releases(releases: list) -> Release:
             if release_format not in merged.formats:
                 merged.formats.append(release_format)
 
+        for label in release.labels:
+            if label not in merged.labels:
+                merged.labels.append(label)
+
     return merged
 
 
@@ -263,6 +267,19 @@ def merge_catalogs(primary, secondary):
             known[key] = release
 
     return merged, num_added
+
+
+def _relaxed_name(text):
+    """A name without what catalogs tend to leave out: remarks in parentheses, as in
+    'SDH (Semiotics Department of Heteronyms)' or 'Separate Ways (Original Mix)', and a
+    trailing 'EP'."""
+
+    words = _PARENTHESES_REGEX.sub(" ", text or "").replace(" - ", " ").split()
+
+    while words and words[-1].lower() in _RELEASE_TYPE_WORDS | {"single"}:
+        words.pop()
+
+    return " ".join(words)
 
 
 def _base_title_tokens(title):
@@ -398,6 +415,7 @@ class MusicBrainzClient:
         media = data.get("media") or []
         catalog_numbers = []
         label_ids = []
+        labels = []
 
         for label_info in data.get("label-info") or []:
             number = label_info.get("catalog-number")
@@ -405,10 +423,13 @@ class MusicBrainzClient:
             if number and number not in catalog_numbers:
                 catalog_numbers.append(number)
 
-            label_id = (label_info.get("label") or {}).get("id")
+            label = label_info.get("label") or {}
 
-            if label_id:
-                label_ids.append(label_id)
+            if label.get("id"):
+                label_ids.append(label["id"])
+
+            if label.get("name") and label["name"] not in labels:
+                labels.append(label["name"])
 
         return Release(
             release_id=f"{MUSICBRAINZ}:{data['id']}",
@@ -421,7 +442,8 @@ class MusicBrainzClient:
             catalog_numbers=catalog_numbers,
             formats=sorted({medium["format"] for medium in media if medium.get("format")}),
             track_count=sum(medium.get("track-count") or 0 for medium in media),
-            label_ids=label_ids
+            label_ids=label_ids,
+            labels=labels
         )
 
     @staticmethod
@@ -663,7 +685,7 @@ class DiscogsClient:
             items.append({
                 "id": result["id"], "artist": credited, "title": release_title,
                 "format": ", ".join(result.get("format") or []), "catno": result.get("catno"),
-                "year": int(year) if year.isdigit() else None
+                "year": int(year) if year.isdigit() else None, "label": result.get("label")
             })
 
         return rank_album_matches(self._merge_listing(items), artist, title)[:limit]
@@ -691,6 +713,22 @@ class DiscogsClient:
         return (bool(tokens & _DISCOGS_UNOFFICIAL_FORMATS), "file" not in tokens, "cd" not in tokens,
                 item.get("year") or 9999)
 
+    def _label_names(self, names):
+        """Listings name a release's label in a string, search results in a list."""
+
+        if isinstance(names, str):
+            names = [names]
+
+        labels = []
+
+        for name in names or []:
+            name = self.clean_name(name)
+
+            if name and name not in labels:
+                labels.append(name)
+
+        return labels
+
     def _parse_listing_item(self, item):
 
         artist = self.clean_name(item.get("artist"))
@@ -707,7 +745,8 @@ class DiscogsClient:
             year=item.get("year") or None,
             kind=self._kind_from_format(format_names),
             catalog_numbers=[catalog_number] if catalog_number and catalog_number.lower() != "none" else [],
-            formats=[name.strip() for name in format_names if name.strip()]
+            formats=[name.strip() for name in format_names if name.strip()],
+            labels=self._label_names(item.get("label"))
         )
 
     def label_releases(self, label_id):
@@ -836,6 +875,7 @@ class DiscogsClient:
             formats=[name for name in format_names if name],
             track_count=len(tracks),
             label_ids=[str(label["id"]) for label in labels if label.get("id")],
+            labels=self._label_names([label.get("name") for label in labels]),
             tracks=tracks
         )
 
@@ -1010,10 +1050,16 @@ class Catalog:
 
         albums = []
         warnings = []
+        relaxed = (_relaxed_name(artist), _relaxed_name(title))
 
         for client in (self.musicbrainz, self.discogs):
             try:
-                albums, _num_added = merge_catalogs(albums, client.find_albums(artist, title, limit=limit))
+                found = client.find_albums(artist, title, limit=limit)
+
+                if not found and relaxed != (artist, title) and all(relaxed):
+                    found = client.find_albums(*relaxed, limit=limit)
+
+                albums, _num_added = merge_catalogs(albums, found)
 
             except CatalogError as error:
                 warnings.append(str(error))

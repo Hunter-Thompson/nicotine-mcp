@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from dataclasses import field
 
+from nicotine_mcp.matching import is_various_artists
 from nicotine_mcp.matching import Release
 
 _UNSAFE_FOLDER_CHARACTERS = str.maketrans({character: "_" for character in '/\\:*?"<>|'})
@@ -100,6 +101,7 @@ class Job:
     retry_rounds: int = 0
     blocked_reason: str | None = None
     download_folder: str | None = None
+    group_by: str = "job"  # Subfolders: one named after the job, or one per artist or label
     formats: list | None = None
     prefer: str = "balanced"
     min_bitrate: int = 0
@@ -121,6 +123,22 @@ class Job:
 
 def clean_folder_name(name):
     return (name or "").translate(_UNSAFE_FOLDER_CHARACTERS).strip(" .") or "Unknown"
+
+
+def release_folder_name(release, group_by):
+    """The subfolder a release is filed in: its artist, or its label when asked for and
+    known, and always the label for a compilation."""
+
+    artist = release.primary_artist or release.artist
+    label = release.labels[0] if release.labels else ""
+
+    if group_by == "label" and label:
+        return clean_folder_name(label)
+
+    if is_various_artists(artist):
+        return clean_folder_name(label or "Various Artists")
+
+    return clean_folder_name(artist)
 
 
 def is_destination_available(path):
